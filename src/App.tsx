@@ -1,6 +1,7 @@
 import React, { StrictMode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { useTranslation } from 'react-i18next';
 import Splash from './pages/Splash';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -14,21 +15,21 @@ import Layout from './components/Layout';
 import './i18n/config';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, isGuest } = useAuth();
+  const { t, i18n } = useTranslation();
   
   if (loading) return <div className="h-screen w-screen flex items-center justify-center"><div className="loader"></div></div>;
-  if (!user) return <Navigate to="/login" />;
-  if (profile && !profile.is_approved) {
+  if (!user && !isGuest) return <Navigate to="/login" />;
+  if (profile && !profile.is_approved && !isGuest) {
     return (
       <div className="h-screen w-screen p-8 flex flex-col items-center justify-center text-center bg-primary text-white">
-        <h1 className="text-2xl font-bold mb-4">Kont an attant / Compte en attente</h1>
-        <p className="opacity-80">Administratè a dwe aktive kont ou an anvan ou ka aksede platfòm la.</p>
-        <p className="opacity-80 mt-2">L'administrateur doit activer votre compte avant que vous puissiez accéder à la plateforme.</p>
+        <h1 className="text-2xl font-bold mb-4">{t('approval.title')}</h1>
+        <p className="opacity-80">{i18n.language === 'ha' ? t('approval.message_ha') : t('approval.message_fr')}</p>
         <button 
           onClick={() => window.location.reload()} 
           className="mt-8 px-6 py-2 bg-secondary rounded-full font-bold"
         >
-          Tcheke ankò / Vérifier à nouveau
+          {t('approval.check_again')}
         </button>
       </div>
     );

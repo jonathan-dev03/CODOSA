@@ -36,7 +36,7 @@ export default function Homework() {
   return (
     <div className="p-6 space-y-6">
       <header className="flex items-center justify-between">
-        <h2 className="text-2xl font-black text-primary tracking-tight italic">Devwa / Devoirs</h2>
+        <h2 className="text-2xl font-black text-primary tracking-tight italic">{t('homework.title')}</h2>
         {isProfessor && (
           <button className="bg-secondary p-3 rounded-2xl text-white shadow-lg active:scale-95 transition-all">
              <Plus size={20} />

@@ -46,7 +46,7 @@ export default function Discipline() {
     doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(22);
-    doc.text('CODOSA - Rapò Disiplinè', 20, 25);
+    doc.text(`CODOSA - ${t('discipline.reports_pdf_title')}`, 20, 25);
     
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(12);
@@ -91,7 +91,7 @@ export default function Discipline() {
 
       <div className="flex space-x-2">
          <button onClick={() => setView('directory')} className={clsx("flex-1 py-3 font-bold rounded-2xl text-xs transition-all", view === 'directory' ? "bg-primary text-white shadow-lg" : "bg-white text-primary")}>Lis Elèv</button>
-         <button onClick={() => setView('reports')} className={clsx("flex-1 py-3 font-bold rounded-2xl text-xs transition-all", view === 'reports' ? "bg-primary text-white shadow-lg" : "bg-white text-primary")}>Rapò / Charts</button>
+         <button onClick={() => setView('reports')} className={clsx("flex-1 py-3 font-bold rounded-2xl text-xs transition-all", view === 'reports' ? "bg-primary text-white shadow-lg" : "bg-white text-primary")}>{t('discipline.reports')}</button>
       </div>
 
       {view === 'directory' ? (

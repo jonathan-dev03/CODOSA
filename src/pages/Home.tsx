@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { Bell, Info, MapPin, Phone, Mail, Award } from 'lucide-react';
 
 export default function Home() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { profile } = useAuth();
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,19 +36,19 @@ export default function Home() {
         </div>
         
         <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="relative z-10">
-          <h2 className="text-accent text-sm font-black tracking-[0.2em] uppercase mb-4 opacity-90">Bienvenue / Byenvini</h2>
+          <h2 className="text-accent text-sm font-black tracking-[0.2em] uppercase mb-4 opacity-90">{t('home.welcome')}</h2>
           <h1 className="text-white text-3xl font-black leading-tight mb-2 uppercase">
              {profile?.full_name?.split(' ')[0]},<br/>
-             <span className="text-accent">Nap fòme demen!</span>
+             <span className="text-accent">{t('home.tagline')}</span>
           </h1>
           <p className="text-white/80 text-sm font-medium mb-6">Campus {profile?.campus?.toUpperCase()} — {profile?.role?.toUpperCase()}</p>
           
           <div className="flex space-x-3">
              <button className="bg-accent text-primary px-5 py-2.5 rounded-full font-black text-[10px] uppercase tracking-widest shadow-lg shadow-accent/20 active:scale-95 transition-all">
-                Check Attendance
+                {t('home.check_attendance')}
              </button>
              <button className="bg-white/20 backdrop-blur-md text-white px-5 py-2.5 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all">
-                Quick Report
+                {t('home.quick_report')}
              </button>
           </div>
         </motion.div>
@@ -57,16 +57,16 @@ export default function Home() {
       {/* Stats Quick View */}
       <div className="px-6 grid grid-cols-2 gap-4 -mt-6 relative z-10">
          <div className="bg-white p-5 rounded-3xl shadow-xl border border-gray-100 flex flex-col items-center text-center">
-            <span className="text-[9px] font-black uppercase text-gray-400 tracking-tighter">Attendance Today</span>
+            <span className="text-[9px] font-black uppercase text-gray-400 tracking-tighter">{t('home.attendance_today')}</span>
             <span className="text-2xl font-black text-primary mt-1">94.2%</span>
             <div className="w-full bg-gray-100 h-1 mt-3 rounded-full overflow-hidden">
                <div className="bg-green-500 h-full w-[94%]"></div>
             </div>
          </div>
          <div className="bg-white p-5 rounded-3xl shadow-xl border border-gray-100 flex flex-col items-center text-center">
-            <span className="text-[9px] font-black uppercase text-gray-400 tracking-tighter">Active Incidents</span>
+            <span className="text-[9px] font-black uppercase text-gray-400 tracking-tighter">{t('home.active_incidents')}</span>
             <span className="text-2xl font-black text-primary mt-1">12</span>
-            <span className="text-[8px] font-black text-red-500 mt-2 uppercase">+3 depi maten</span>
+            <span className="text-[8px] font-black text-red-500 mt-2 uppercase">+{i18n.language === 'ha' ? `3 ${t('home.since_morning')}` : `3 ${t('home.since_morning')}`}</span>
          </div>
       </div>
 
@@ -75,9 +75,9 @@ export default function Home() {
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-primary text-sm font-black uppercase tracking-widest flex items-center">
             <Bell className="w-4 h-4 mr-2 text-secondary" />
-            Latest Announcements
+            {t('home.latest_announcements')}
           </h3>
-          <button className="text-secondary text-[10px] font-bold uppercase tracking-widest">View All</button>
+          <button className="text-secondary text-[10px] font-bold uppercase tracking-widest">{t('home.view_all')}</button>
         </div>
 
         {loading ? (
@@ -85,7 +85,7 @@ export default function Home() {
         ) : announcements.length === 0 ? (
           <div className="bg-white p-8 rounded-3xl text-center border border-gray-100 shadow-sm">
              <Bell className="w-12 h-12 text-gray-100 mx-auto mb-2" />
-             <p className="text-gray-400 font-medium italic">Pa gen okenn anons pou kounye a.</p>
+             <p className="text-gray-400 font-medium italic">{t('home.no_announcements')}</p>
           </div>
         ) : (
           <div className="space-y-4">

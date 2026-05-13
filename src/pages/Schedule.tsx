@@ -40,7 +40,7 @@ export default function Schedule() {
   return (
     <div className="p-6 space-y-6">
       <header className="flex items-center justify-between">
-        <h2 className="text-2xl font-black text-primary tracking-tight italic">Orè / Emploi</h2>
+        <h2 className="text-2xl font-black text-primary tracking-tight italic">{t('schedule.title')}</h2>
         {isAdmin && (
           <button className="bg-primary p-3 rounded-2xl text-white shadow-lg active:scale-95 transition-all">
              <Plus size={20} />
@@ -75,7 +75,7 @@ export default function Schedule() {
                 <span className="text-xs font-black text-primary/40 tracking-tighter">{time}</span>
              </div>
              <div className="flex-1 bg-white p-4 rounded-3xl border border-gray-50 shadow-sm min-h-[80px] flex items-center justify-center">
-                <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Pa gen kou plane / Aucun cours</p>
+                <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">{t('schedule.no_classes')}</p>
              </div>
           </div>
         ))}

@@ -58,11 +58,11 @@ export default function Journal() {
   };
 
   const categories = [
-    { id: 'all', label: 'Tout' },
-    { id: 'article', label: 'Atik' },
-    { id: 'gallery', label: 'Galeri' },
-    { id: 'event', label: 'Evenman' },
-    { id: 'message_directeur', label: 'Mesaj Direktè' },
+    { id: 'all', label: t('journal.categories.all') },
+    { id: 'article', label: t('journal.categories.article') },
+    { id: 'gallery', label: t('journal.categories.gallery') },
+    { id: 'event', label: t('journal.categories.event') },
+    { id: 'message_directeur', label: t('journal.categories.message_directeur') },
   ];
 
   return (
@@ -82,13 +82,13 @@ export default function Journal() {
             onClick={() => setTab('all')}
             className={clsx("flex-1 py-3 text-xs font-bold rounded-xl transition-all", tab === 'all' ? "bg-white text-primary shadow-sm" : "text-gray-500")}
           >
-            Pibliye / Publiés
+            {t('journal.published')}
           </button>
           <button 
             onClick={() => setTab('pending')}
             className={clsx("flex-1 py-3 text-xs font-bold rounded-xl transition-all relative", tab === 'pending' ? "bg-white text-primary shadow-sm" : "text-gray-500")}
           >
-            En attente
+            {t('journal.pending')}
             {pendingArticles.length > 0 && (
               <span className="absolute top-2 right-4 w-2 h-2 bg-red-500 rounded-full"></span>
             )}
@@ -119,7 +119,7 @@ export default function Journal() {
             ) : articles.length === 0 ? (
               <div className="bg-white p-12 rounded-3xl text-center shadow-sm">
                 <ImageIcon className="w-16 h-16 text-gray-100 mx-auto mb-4" />
-                <p className="text-gray-400">Pa gen atik disponib pou kounye a.</p>
+                <p className="text-gray-400">{t('journal.no_articles')}</p>
               </div>
             ) : (
               articles.map((art) => (
@@ -148,7 +148,7 @@ export default function Journal() {
                     <div className="flex items-center justify-between mt-6">
                       <div className="flex items-center space-x-2">
                         <div className="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-[10px] font-black">{art.author_role?.[0]?.toUpperCase()}</div>
-                        <span className="text-xs font-bold text-primary opacity-60">Par L'Équipe CODOSA</span>
+                        <span className="text-xs font-bold text-primary opacity-60">{t('journal.by_team')}</span>
                       </div>
                       <ChevronRight className="text-secondary" size={20} />
                     </div>

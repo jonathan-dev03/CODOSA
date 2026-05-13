@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 import { motion } from 'motion/react';
 
 export default function Login() {
   const { t, i18n } = useTranslation();
+  const { setGuestMode } = useAuth();
   const navigate = useNavigate();
   const [role, setRole] = useState('eleve');
   const [loading, setLoading] = useState(false);
@@ -13,6 +14,11 @@ export default function Login() {
 
   const toggleLanguage = () => {
     i18n.changeLanguage(i18n.language === 'ha' ? 'fr' : 'ha');
+  };
+
+  const handleGuestLogin = () => {
+    setGuestMode(true);
+    navigate('/home');
   };
 
   const handleGoogleLogin = async () => {
@@ -24,7 +30,7 @@ export default function Login() {
     
     // For demo/prototype and restricted domain validation logic:
     // We'll simulate the domain check part here since we don't have the real OAuth flow configured
-    alert('Bòtò Google la ap mache sou sèvè Supabase la sèlman si li konfigire. / Le bouton Google fonctionne sur le serveur Supabase seulement s\'il est configuré.');
+    alert(t('login.google_btn_warning'));
     setLoading(false);
   };
 
@@ -107,13 +113,20 @@ export default function Login() {
 
           <div className="relative py-2">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-100"></div></div>
-            <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-gray-400">Oswa / Ou</span></div>
+            <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-gray-400">{t('login.or')}</span></div>
           </div>
 
           <div className="space-y-4">
              <Link to="/register" className="block w-full text-center text-secondary font-bold hover:underline">
-               Kree yon kont / Créer un compte
+               {t('login.register_link')}
              </Link>
+             
+             <button 
+               onClick={handleGuestLogin}
+               className="w-full text-center text-primary opacity-60 text-xs font-bold uppercase tracking-widest hover:opacity-100 transition-opacity"
+             >
+               {t('login.guest_btn')}
+             </button>
           </div>
         </div>
       </motion.div>
