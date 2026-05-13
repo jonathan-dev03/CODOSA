@@ -1,0 +1,8 @@
+{
+  "name": "Remix: CODOSA",
+  "description": "Internal school management platform for Collège Dominique Savio, Haiti. Features include bilingual support, attendance tracking, discipline logs, and automated scheduling.",
+  "requestFramePermissions": [
+    "notifications"
+  ],
+  "majorCapabilities": []
+}

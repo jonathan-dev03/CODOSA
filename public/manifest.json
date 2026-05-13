@@ -1,0 +1,15 @@
+{
+  "name": "CODOSA",
+  "short_name": "CODOSA",
+  "theme_color": "#010657",
+  "background_color": "#010657",
+  "display": "standalone",
+  "start_url": "/splash",
+  "icons": [
+    {
+      "src": "https://ais-dev-yl7frxshpezit7v374zb2v-306181446839.us-west1.run.app/images/logo-main.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
