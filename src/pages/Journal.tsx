@@ -113,11 +113,11 @@ export default function Journal() {
             ))}
           </div>
 
-          <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {loading ? (
-              <div className="flex justify-center py-12"><div className="loader"></div></div>
+              <div className="col-span-full flex justify-center py-12"><div className="loader"></div></div>
             ) : articles.length === 0 ? (
-              <div className="bg-white p-12 rounded-3xl text-center shadow-sm">
+              <div className="col-span-full bg-white p-12 rounded-3xl text-center shadow-sm">
                 <ImageIcon className="w-16 h-16 text-gray-100 mx-auto mb-4" />
                 <p className="text-gray-400">{t('journal.no_articles')}</p>
               </div>
@@ -127,30 +127,42 @@ export default function Journal() {
                   key={art.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-50 relative group"
+                  whileHover={{ y: -8 }}
+                  className="bg-white rounded-3xl overflow-hidden shadow-lg border border-gray-50 flex flex-col group"
                 >
-                  <div className="h-48 bg-gray-200 flex items-center justify-center">
+                  <div className="h-56 bg-gray-200 relative overflow-hidden">
                     {art.cover_image_url ? (
-                      <img src={art.cover_image_url} alt={art.title} className="w-full h-full object-cover" />
+                      <img src={art.cover_image_url} alt={art.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                     ) : (
-                       <div className="flex flex-col items-center opacity-10">
-                          <ImageIcon size={48} />
-                          <span className="font-bold text-sm">CODOSA IMAGE</span>
+                       <div className="w-full h-full flex flex-col items-center justify-center opacity-10 bg-primary">
+                          <ImageIcon size={48} className="text-white" />
+                          <span className="font-black text-sm text-white">CODOSA</span>
                        </div>
                     )}
-                  </div>
-                  <div className="p-6">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="bg-accent/10 text-accent text-[9px] font-black px-2 py-1 rounded uppercase tracking-widest">{art.category}</span>
-                      <span className="text-[9px] text-gray-400 font-bold uppercase">{new Date(art.published_at).toLocaleDateString()}</span>
+                    <div className="absolute top-4 left-4">
+                      <span className="bg-white/90 backdrop-blur-md text-primary text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest shadow-lg border border-white/20">
+                        {art.category}
+                      </span>
                     </div>
-                    <h3 className="text-xl font-bold text-primary mb-2 leading-tight">{art.title}</h3>
-                    <div className="flex items-center justify-between mt-6">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-[10px] font-black">{art.author_role?.[0]?.toUpperCase()}</div>
-                        <span className="text-xs font-bold text-primary opacity-60">{t('journal.by_team')}</span>
+                  </div>
+                  <div className="p-8 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">{new Date(art.published_at).toLocaleDateString()}</span>
                       </div>
-                      <ChevronRight className="text-secondary" size={20} />
+                      <h3 className="text-xl font-black text-primary mb-4 leading-tight uppercase group-hover:text-secondary transition-colors">{art.title}</h3>
+                      <p className="text-xs text-gray-500 leading-relaxed line-clamp-3 mb-6">{art.content}</p>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-6 border-t border-gray-50">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-full bg-secondary/20 flex items-center justify-center text-xs font-black text-secondary">{art.author_role?.[0]?.toUpperCase()}</div>
+                        <div>
+                          <p className="text-[10px] font-black text-primary uppercase tracking-widest">{t('journal.by_team')}</p>
+                          <p className="text-[9px] text-gray-400 font-medium">Equipe Admin</p>
+                        </div>
+                      </div>
+                      <ChevronRight className="text-secondary group-hover:translate-x-2 transition-transform" size={24} />
                     </div>
                   </div>
                 </motion.div>

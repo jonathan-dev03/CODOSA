@@ -18,6 +18,7 @@ export default function Account() {
     navigate('/login');
   };
 
+  const canStartNewYear = ['directeur', 'censeur_fondamental', 'censeur_secondaire', 'super_admin'].includes(profile?.role);
   const isAdmin = ['super_admin', 'directeur'].includes(profile?.role);
 
   return (
@@ -79,12 +80,15 @@ export default function Account() {
         </button>
       </div>
 
-      {isAdmin && (
+      {canStartNewYear && (
         <section className="bg-accent p-6 rounded-[2.5rem] shadow-xl border-4 border-white relative overflow-hidden">
           <GraduationCap className="absolute -bottom-4 -right-4 w-24 h-24 text-primary opacity-10" />
           <h3 className="text-primary font-black uppercase text-xs tracking-widest mb-2">{t('account.academic_actions')}</h3>
           <p className="text-primary/70 text-sm font-medium mb-4">{t('account.academic_description')}</p>
-          <button className="bg-primary text-white w-full py-3 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-lg active:scale-95 transition-all">
+          <button 
+            onClick={() => navigate('/discipline')}
+            className="bg-primary text-white w-full py-3 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-lg active:scale-95 transition-all text-center"
+          >
              {t('account.new_academic_year')}
           </button>
         </section>

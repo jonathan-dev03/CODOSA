@@ -28,7 +28,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .single();
 
     if (!error && data) {
-      setProfile(data);
+      let rawName = data.full_name || '';
+      let startYear = '2025-2026';
+      let activeYearStr = '';
+      
+      if (rawName.includes(' |start_year:')) {
+        const parts = rawName.split(' |start_year:');
+        rawName = parts[0];
+        const subparts = parts[1]?.split('|active_year:');
+        startYear = subparts[0] || '2025-2026';
+        activeYearStr = subparts[1] || '';
+      } else if (rawName.includes('|active_year:')) {
+        const parts = rawName.split('|active_year:');
+        rawName = parts[0];
+        activeYearStr = parts[1] || '';
+      }
+
+      setProfile({
+        ...data,
+        raw_full_name: data.full_name, // original backed up
+        full_name: rawName,
+        start_year: startYear,
+        active_year: activeYearStr || startYear
+      });
     }
   };
 
@@ -36,19 +58,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user) await fetchProfile(user.id);
   };
 
-  const setGuestMode = (enabled: boolean) => {
-    setIsGuest(enabled);
-    if (enabled) {
-      // Mock profile for guest
-      setProfile({
-        full_name: 'Invite - Guest',
-        role: 'eleve',
-        campus: 'fondamantal',
-        is_approved: true
-      });
-    } else {
-      if (!user) setProfile(null);
-    }
+  const setGuestMode = (role: string = 'eleve') => {
+    setIsGuest(true);
+    // Mock profile for guest
+    setProfile({
+      full_name: 'Invite - ' + (role.charAt(0).toUpperCase() + role.slice(1)),
+      role: role,
+      campus: 'fondamantal',
+      is_approved: true
+    });
   };
 
   useEffect(() => {

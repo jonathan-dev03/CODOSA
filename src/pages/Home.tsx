@@ -44,18 +44,22 @@ export default function Home() {
           <p className="text-white/80 text-sm font-medium mb-6">Campus {profile?.campus?.toUpperCase()} — {profile?.role?.toUpperCase()}</p>
           
           <div className="flex space-x-3">
-             <button className="bg-accent text-primary px-5 py-2.5 rounded-full font-black text-[10px] uppercase tracking-widest shadow-lg shadow-accent/20 active:scale-95 transition-all">
-                {t('home.check_attendance')}
-             </button>
-             <button className="bg-white/20 backdrop-blur-md text-white px-5 py-2.5 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all">
-                {t('home.quick_report')}
-             </button>
+             {(profile?.role === 'directeur' || profile?.role === 'professeur') && (
+               <>
+                 <button className="bg-accent text-primary px-5 py-2.5 rounded-full font-black text-[10px] uppercase tracking-widest shadow-lg shadow-accent/20 active:scale-95 transition-all">
+                    {t('home.check_attendance')}
+                 </button>
+                 <button className="bg-white/20 backdrop-blur-md text-white px-5 py-2.5 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all">
+                    {t('home.quick_report')}
+                 </button>
+               </>
+             )}
           </div>
         </motion.div>
       </section>
 
       {/* Stats Quick View */}
-      <div className="px-6 grid grid-cols-2 gap-4 -mt-6 relative z-10">
+      <div className="px-6 grid grid-cols-2 md:grid-cols-4 gap-4 -mt-6 relative z-10">
          <div className="bg-white p-5 rounded-3xl shadow-xl border border-gray-100 flex flex-col items-center text-center">
             <span className="text-[9px] font-black uppercase text-gray-400 tracking-tighter">{t('home.attendance_today')}</span>
             <span className="text-2xl font-black text-primary mt-1">94.2%</span>
@@ -67,6 +71,18 @@ export default function Home() {
             <span className="text-[9px] font-black uppercase text-gray-400 tracking-tighter">{t('home.active_incidents')}</span>
             <span className="text-2xl font-black text-primary mt-1">12</span>
             <span className="text-[8px] font-black text-red-500 mt-2 uppercase">+{i18n.language === 'ha' ? `3 ${t('home.since_morning')}` : `3 ${t('home.since_morning')}`}</span>
+         </div>
+         <div className="bg-white p-5 rounded-3xl shadow-xl border border-gray-100 flex flex-col items-center text-center">
+            <span className="text-[9px] font-black uppercase text-gray-400 tracking-tighter">{t('home.class_average')}</span>
+            <span className="text-2xl font-black text-primary mt-1">7.8</span>
+            <div className="w-full bg-gray-100 h-1 mt-3 rounded-full overflow-hidden">
+               <div className="bg-secondary h-full w-[78%]"></div>
+            </div>
+         </div>
+         <div className="bg-white p-5 rounded-3xl shadow-xl border border-gray-100 flex flex-col items-center text-center">
+            <span className="text-[9px] font-black uppercase text-gray-400 tracking-tighter">{t('home.events')}</span>
+            <span className="text-2xl font-black text-primary mt-1">02</span>
+            <span className="text-[8px] font-black text-blue-500 mt-2 uppercase">{t('home.this_month')}</span>
          </div>
       </div>
 
@@ -88,23 +104,29 @@ export default function Home() {
              <p className="text-gray-400 font-medium italic">{t('home.no_announcements')}</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {announcements.map((item) => (
               <motion.div 
                 key={item.id}
-                whileHover={{ y: -2 }}
-                className="bg-white p-5 rounded-3xl shadow-sm border-l-4 border-secondary flex space-x-4"
+                whileHover={{ y: -5, rotate: 1 }}
+                className="bg-white p-6 rounded-[2.5rem] shadow-lg border border-gray-50 flex flex-col space-y-4"
               >
-                <div className="flex-shrink-0 bg-gray-50 border border-gray-100 p-2 rounded-2xl h-fit">
-                   <p className="text-[10px] font-black text-center leading-none text-primary uppercase">
-                     {new Date(item.created_at).toLocaleString('default', { month: 'short' })}<br/>
-                     <span className="text-lg">{new Date(item.created_at).getDate()}</span>
-                   </p>
+                <div className="flex items-start justify-between">
+                  <div className="bg-secondary/10 p-3 rounded-2xl">
+                    <Info size={20} className="text-secondary" />
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-primary uppercase opacity-30">
+                      {new Date(item.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
                 </div>
                 <div>
-                   <h4 className="font-bold text-sm text-primary">{item.title}</h4>
-                   <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">{item.body}</p>
-                   <span className="inline-block mt-3 text-[9px] px-2 py-0.5 bg-accent/20 text-primary rounded-full font-black uppercase tracking-tighter">{item.target || 'ALL'}</span>
+                   <h4 className="font-black text-lg text-primary uppercase leading-tight">{item.title}</h4>
+                   <p className="text-xs text-gray-500 mt-2 leading-relaxed line-clamp-4">{item.body || item.content}</p>
+                </div>
+                <div className="pt-2">
+                   <span className="text-[9px] px-3 py-1 bg-accent/20 text-primary rounded-full font-black uppercase tracking-widest">{item.target || 'TOUT'}</span>
                 </div>
               </motion.div>
             ))}
@@ -125,13 +147,13 @@ export default function Home() {
                 <div className="w-8 h-8 rounded-full bg-secondary/10 flex items-center justify-center">
                   <MapPin size={14} className="text-secondary"/>
                 </div>
-                <span className="text-[10px] font-bold text-primary uppercase">Pòtoprens, Ayiti</span>
              </div>
              <div className="flex items-center space-x-2">
+                <span className="text-[10px] font-bold text-primary uppercase">Pétion-Ville, Haïti</span>
                 <div className="w-8 h-8 rounded-full bg-secondary/10 flex items-center justify-center">
                   <Info size={14} className="text-secondary"/>
                 </div>
-                <span className="text-[10px] font-bold text-primary uppercase">Fonde an 19xx</span>
+                <span className="text-[10px] font-bold text-primary uppercase">Fondée an 1963</span>
              </div>
           </div>
         </div>
@@ -145,7 +167,7 @@ export default function Home() {
              <div className="bg-white/10 p-3 rounded-xl"><MapPin className="text-secondary w-5 h-5"/></div>
              <div>
                 <p className="text-[10px] font-bold opacity-60 uppercase">Adrès</p>
-                <p className="text-sm font-medium">Boutilliers, Pétion-Ville, Haiti</p>
+                <p className="text-sm font-medium">34 Rue Lambert, Pétion-Ville, Haiti</p>
              </div>
           </div>
           <div className="flex items-center space-x-4">

@@ -9,6 +9,8 @@ import Home from './pages/Home';
 import Journal from './pages/Journal';
 import Discipline from './pages/Discipline';
 import Schedule from './pages/Schedule';
+import Professors from './pages/Professors';
+import Students from './pages/Students';
 import Homework from './pages/Homework';
 import Account from './pages/Account';
 import Layout from './components/Layout';
@@ -53,6 +55,8 @@ export default function App() {
             <Route path="journal" element={<Journal />} />
             <Route path="discipline" element={<Discipline />} />
             <Route path="schedule" element={<Schedule />} />
+            <Route path="professors" element={<Professors />} />
+            <Route path="students" element={<Students />} />
             <Route path="homework" element={<Homework />} />
             <Route path="account" element={<Account />} />
           </Route>

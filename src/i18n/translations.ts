@@ -22,6 +22,7 @@ export const translations = {
         "password": "Modpas",
         "role": "Wòl",
         "campus_select": "Campus",
+        "classroom_select": "Klas / Salle",
         "submit": "Kree Kont",
         "login_link": "Konekte si w gen kont deja"
       },
@@ -51,6 +52,8 @@ export const translations = {
         "journal": "Jounal",
         "discipline": "Disiplin",
         "schedule": "Orè",
+        "professors": "Pwofesè yo",
+        "students": "Elèv yo",
         "homework": "Devwa",
         "account": "Kont Mwen"
       },
@@ -61,7 +64,10 @@ export const translations = {
         "quick_report": "Rapò Rapid",
         "attendance_today": "Prezans Jodi a",
         "active_incidents": "Ensidan Aktyèl",
-        "since_morning": "depi maten",
+        "since_morning": "depis maten",
+        "class_average": "Mwayèn Klas",
+        "events": "Evènman",
+        "this_month": "Mwa sa",
         "latest_announcements": "Dènye Anons yo",
         "view_all": "Gade Tout",
         "no_announcements": "Pa gen okenn anons pou kounye a.",
@@ -94,6 +100,12 @@ export const translations = {
           "indiscipline": "Endisiplin",
           "devoir_non_rendu": "Devwa pa renmèt",
           "autre": "Lòt"
+        },
+        "filters": {
+          "day": "Jodi a",
+          "week": "Semèn sa",
+          "month": "Mwa sa",
+          "quarter": "Trimès"
         }
       },
       "schedule": {
@@ -101,10 +113,21 @@ export const translations = {
         "no_classes": "Pa gen kou plane",
         "publish": "Pibliye Orè",
         "generate": "Jenere Orè",
-        "availability": "Disponibilite"
+        "availability": "Disponibilite",
+        "select_class": "Chwazi Klas"
       },
       "homework": {
         "title": "Devwa"
+      },
+      "professors": {
+        "title": "Lis Pwofesè",
+        "subject": "Matiè",
+        "search": "Chache yon pwofesè..."
+      },
+      "students_list": {
+        "title": "Lis Elèv",
+        "classroom": "Klas",
+        "search": "Chache yon elèv..."
       },
       "account": {
         "logout": "Dekonekte",
@@ -139,6 +162,7 @@ export const translations = {
         "password": "Mot de passe",
         "role": "Rôle",
         "campus_select": "Campus",
+        "classroom_select": "Classe / Salle",
         "submit": "S'inscrire",
         "login_link": "Déjà inscrit ?"
       },
@@ -168,6 +192,8 @@ export const translations = {
         "journal": "Journal",
         "discipline": "Discipline",
         "schedule": "Horaire",
+        "professors": "Professeurs",
+        "students": "Élèves",
         "homework": "Devoirs",
         "account": "Mon Compte"
       },
@@ -179,6 +205,9 @@ export const translations = {
         "attendance_today": "Présence Aujourd'hui",
         "active_incidents": "Incidents Actuels",
         "since_morning": "depuis ce matin",
+        "class_average": "Moyenne Classe",
+        "events": "Événements",
+        "this_month": "Ce mois",
         "latest_announcements": "Dernières Annonces",
         "view_all": "Tout Voir",
         "no_announcements": "Aucune annonce pour le moment.",
@@ -211,6 +240,12 @@ export const translations = {
           "indiscipline": "Indiscipline",
           "devoir_non_rendu": "Devoir non rendu",
           "autre": "Autre"
+        },
+        "filters": {
+          "day": "Aujourd'hui",
+          "week": "Cette semaine",
+          "month": "Ce mois",
+          "quarter": "Trimestre"
         }
       },
       "schedule": {
@@ -218,10 +253,21 @@ export const translations = {
         "no_classes": "Aucun cours",
         "publish": "Publier l'Horaire",
         "generate": "Générer l'Horaire",
-        "availability": "Disponibilité"
+        "availability": "Disponibilité",
+        "select_class": "Choisir une Classe"
       },
       "homework": {
         "title": "Devoirs"
+      },
+      "professors": {
+        "title": "Liste des Professeurs",
+        "subject": "Matière",
+        "search": "Rechercher un professeur..."
+      },
+      "students_list": {
+        "title": "Liste des Élèves",
+        "classroom": "Classe",
+        "search": "Rechercher un élève..."
       },
       "account": {
         "logout": "Déconnexion",

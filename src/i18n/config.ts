@@ -11,7 +11,8 @@ i18n
       ha: translations.ha,
       fr: translations.fr
     },
-    fallbackLng: 'ha',
+    lng: localStorage.getItem('i18nextLng') || 'fr',
+    fallbackLng: 'fr',
     interpolation: {
       escapeValue: false
     }
