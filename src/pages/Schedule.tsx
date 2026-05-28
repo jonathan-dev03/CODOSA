@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 import { 
   Calendar as CalendarIcon, 
   Clock, 
@@ -31,6 +34,7 @@ interface CustomSlot {
 
 export default function Schedule() {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const isFr = i18n.language === 'fr';
   const { profile } = useAuth();
   
@@ -38,9 +42,9 @@ export default function Schedule() {
   const [loading, setLoading] = useState(true);
   const [teachers, setTeachers] = useState<any[]>([]);
   
-  const isFundamentalStaff = ['censeur_fondamental', 'resp_ped_fondamental'].includes(profile?.role || '');
-  const isSecondaryStaff = ['censeur_secondaire', 'resp_ped_secondaire'].includes(profile?.role || '');
-  const isAdminOrStaff = ['super_admin', 'directeur', 'censeur_fondamental', 'censeur_secondaire', 'resp_ped_fondamental', 'resp_ped_secondaire'].includes(profile?.role || '');
+  const isFundamentalStaff = ['censeur', 'resp_pedagogique'].includes(profile?.role || '') && profile?.campus === 'fondamantal';
+  const isSecondaryStaff = ['censeur', 'resp_pedagogique'].includes(profile?.role || '') && profile?.campus === 'secondaire';
+  const isAdminOrStaff = ['super_admin', 'directeur', 'censeur', 'resp_pedagogique'].includes(profile?.role || '');
 
   // Campus view logic matching role restrictions
   const initialCampus = isFundamentalStaff ? 'fondamantal' : (isSecondaryStaff ? 'secondaire' : (profile?.campus === 'both' ? 'fondamantal' : profile?.campus || 'fondamantal'));
@@ -53,7 +57,81 @@ export default function Schedule() {
   const [activeDayId, setActiveDayId] = useState<number>(1);
 
   // Tab switcher for Admin
-  const [activeTab, setActiveTab] = useState<'schedules' | 'classrooms'>('schedules');
+  const [activeTab, setActiveTab] = useState<'schedules' | 'classrooms' | 'generation'>('schedules');
+
+  // Auto-generation states
+  const [genLoading, setGenLoading] = useState(false);
+  const [genResult, setGenResult] = useState<any | null>(null);
+  const [genError, setGenError] = useState('');
+  const [campusCoursesForGen, setCampusCoursesForGen] = useState<any[]>([]);
+  const [teacherCoursesForGen, setTeacherCoursesForGen] = useState<any[]>([]);
+
+  // Fetch courses and teacher courses on tab generation or campus change
+  useEffect(() => {
+    if (activeTab === 'generation') {
+      const loadGenData = async () => {
+        setGenLoading(true);
+        setGenError('');
+        try {
+          const cleanCampus = campusView === 'fondamantal' || campusView === 'fondamentale' ? 'fondamantal' : 'secondaire';
+          
+          // 1. fetch courses
+          const { data: dbCourses } = await supabase
+            .from('courses')
+            .select('*')
+            .eq('campus', cleanCampus);
+
+          let fetchedCourses = dbCourses || [];
+          
+          // 2. fetch courseclasses
+          if (fetchedCourses.length > 0) {
+            const courseIds = fetchedCourses.map(c => c.id);
+            const { data: dbClasses } = await supabase
+              .from('course_classes')
+              .select('*')
+              .in('course_id', courseIds);
+
+            fetchedCourses = fetchedCourses.map(course => ({
+              ...course,
+              classes: dbClasses?.filter((cc: any) => cc.course_id === course.id) || []
+            }));
+          } else {
+            const saved = localStorage.getItem(`codosa_courses_${cleanCampus}`);
+            if (saved) {
+              fetchedCourses = JSON.parse(saved);
+            }
+          }
+          setCampusCoursesForGen(fetchedCourses);
+
+          // 3. fetch teacher_courses
+          const { data: dbTeacherCourses } = await supabase
+            .from('teacher_courses')
+            .select('*');
+
+          let fetchedTC = dbTeacherCourses || [];
+          if (fetchedTC.length === 0) {
+            const localSaved: any[] = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && key.startsWith('codosa_teacher_courses_')) {
+                const parts = JSON.parse(localStorage.getItem(key) || '[]');
+                localSaved.push(...parts);
+              }
+            }
+            if (localSaved.length > 0) {
+              fetchedTC = localSaved;
+            }
+          }
+          setTeacherCoursesForGen(fetchedTC);
+
+        } catch (e) {
+          console.error("Error loading generator data", e);
+        }
+        setGenLoading(false);
+      };
+      loadGenData();
+    }
+  }, [activeTab, campusView]);
 
   // Custom slots edit modal states
   const [showEditModal, setShowEditModal] = useState(false);
@@ -85,6 +163,354 @@ export default function Schedule() {
   });
 
   const allowCampusToggle = profile?.campus === 'both' && !isFundamentalStaff && !isSecondaryStaff;
+
+  // Core CSP Backtracking Solver
+  const generateAutoSchedule = (demands: any[], classes: string[]) => {
+    const grid: Record<string, Record<string, Record<number, { courseName: string; teacherName: string; teacherId: string }>>> = {};
+    const teacherBusy: Record<string, Record<string, Record<number, boolean>>> = {};
+
+    // Initialize grids
+    for (const cls of classes) {
+      grid[cls] = {};
+      for (const d of ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi']) {
+        grid[cls][d] = {};
+      }
+    }
+
+    // Sort demands by difficulty value priority: fewer available slots relative to hours needed first
+    const sortedDemands = [...demands].sort((a, b) => {
+      const scoreA = (a.availableSlots?.length || 1) / (a.hoursNeeded || 1);
+      const scoreB = (b.availableSlots?.length || 1) / (b.hoursNeeded || 1);
+      return scoreA - scoreB;
+    });
+
+    const remainingHours = sortedDemands.map(d => d.hoursNeeded);
+
+    const backtrack = (demandIndex: number): boolean => {
+      if (demandIndex >= sortedDemands.length) {
+        return true;
+      }
+
+      const demand = sortedDemands[demandIndex];
+      if (remainingHours[demandIndex] === 0) {
+        return backtrack(demandIndex + 1);
+      }
+
+      const slots = demand.availableSlots || [];
+      for (const slot of slots) {
+        const d = slot.day.toLowerCase();
+        const h = Number(slot.hour);
+
+        // Standard 7h-14h hour checks
+        if (h < 7 || h > 14) continue;
+
+        // Class busy?
+        if (grid[demand.className]?.[d]?.[h]) continue;
+
+        // Teacher busy?
+        if (teacherBusy[demand.teacherId]?.[d]?.[h]) continue;
+
+        // Apply slot assignment
+        if (!grid[demand.className]) grid[demand.className] = {};
+        if (!grid[demand.className][d]) grid[demand.className][d] = {};
+        
+        grid[demand.className][d][h] = {
+          courseName: demand.courseName,
+          teacherName: demand.teacherName,
+          teacherId: demand.teacherId
+        };
+
+        if (!teacherBusy[demand.teacherId]) teacherBusy[demand.teacherId] = {};
+        if (!teacherBusy[demand.teacherId][d]) teacherBusy[demand.teacherId][d] = {};
+        teacherBusy[demand.teacherId][d][h] = true;
+        
+        remainingHours[demandIndex]--;
+
+        // Recurse
+        const satisfied = remainingHours[demandIndex] === 0 
+          ? backtrack(demandIndex + 1)
+          : backtrack(demandIndex);
+
+        if (satisfied) return true;
+
+        // Undo slot assignment
+        delete grid[demand.className][d][h];
+        if (teacherBusy[demand.teacherId]?.[d]) {
+          teacherBusy[demand.teacherId][d][h] = false;
+        }
+        remainingHours[demandIndex]++;
+      }
+
+      return false;
+    };
+
+    const success = backtrack(0);
+    return { success, grid };
+  };
+
+  // Best-effort Greedy optimization fallback
+  const runGreedyAutoSchedule = (demands: any[], classes: string[]) => {
+    const grid: Record<string, Record<string, Record<number, { courseName: string; teacherName: string; teacherId: string }>>> = {};
+    const teacherBusy: Record<string, Record<string, Record<number, boolean>>> = {};
+    const unassigned: any[] = [];
+
+    for (const cls of classes) {
+      grid[cls] = {};
+      for (const d of ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi']) {
+        grid[cls][d] = {};
+      }
+    }
+
+    const sortedDemands = [...demands].sort((a, b) => (a.availableSlots?.length || 1) - (b.availableSlots?.length || 1));
+
+    for (const demand of sortedDemands) {
+      let assignedHours = 0;
+      const slots = demand.availableSlots || [];
+      
+      for (const slot of slots) {
+        if (assignedHours >= demand.hoursNeeded) break;
+
+        const d = slot.day.toLowerCase();
+        const h = Number(slot.hour);
+
+        if (h < 7 || h > 14) continue;
+
+        if (grid[demand.className]?.[d]?.[h]) continue;
+        if (teacherBusy[demand.teacherId]?.[d]?.[h]) continue;
+
+        if (!grid[demand.className]) grid[demand.className] = {};
+        if (!grid[demand.className][d]) grid[demand.className][d] = {};
+
+        grid[demand.className][d][h] = {
+          courseName: demand.courseName,
+          teacherName: demand.teacherName,
+          teacherId: demand.teacherId
+        };
+
+        if (!teacherBusy[demand.teacherId]) teacherBusy[demand.teacherId] = {};
+        if (!teacherBusy[demand.teacherId][d]) teacherBusy[demand.teacherId][d] = {};
+        teacherBusy[demand.teacherId][d][h] = true;
+        assignedHours++;
+      }
+
+      if (assignedHours < demand.hoursNeeded) {
+        unassigned.push({
+          courseName: demand.courseName,
+          className: demand.className,
+          teacherName: demand.teacherName,
+          missingHours: demand.hoursNeeded - assignedHours
+        });
+      }
+    }
+
+    return { grid, unassigned };
+  };
+
+  const handleRunAutoGeneration = () => {
+    setGenLoading(true);
+    setGenError('');
+
+    try {
+      const cleanCampus = campusView === 'fondamantal' || campusView === 'fondamentale' ? 'fondamantal' : 'secondaire';
+      
+      // 1. Extract database/localStorage classrooms
+      const campusRooms = classrooms.filter(r => r.campus === cleanCampus);
+      if (campusRooms.length === 0) {
+        throw new Error(isFr 
+          ? "Aucune salle de classe trouvée sur ce campus. Veuillez en ajouter dans l'onglet 'Salles de classe' d'abord !" 
+          : "Pa gen okenn klas ki kreye sou campus sa a ! Kreye yo anvan nan tab 'Salles de classe' a !"
+        );
+      }
+
+      // Convert classroom records into classes map
+      const classNames = campusRooms.map(r => r.name);
+
+      // 2. Build demands list
+      const demands: any[] = [];
+
+      // For each course on this campus
+      for (const course of campusCoursesForGen) {
+        const courseClasses = course.classes || [];
+        for (const cc of courseClasses) {
+          const exists = classNames.includes(cc.class_name);
+          if (!exists) continue;
+
+          let matchedTCRecord = teacherCoursesForGen.find(tc => 
+            tc.course_class_id === cc.id || tc.course_class_id === course.id || 
+            (tc.courseId === course.id && tc.class_name === cc.class_name)
+          );
+
+          if (!matchedTCRecord) {
+            matchedTCRecord = teacherCoursesForGen.find(tc => tc.course_class_id === course.id || tc.courseId === course.id);
+          }
+
+          let tName = "Enseignant à assigner";
+          let tId = matchedTCRecord?.teacher_id || matchedTCRecord?.teacherId || "unassigned_teacher";
+          
+          if (matchedTCRecord) {
+            const realT = teachers.find(t => t.id === tId);
+            if (realT) {
+              tName = realT.full_name;
+            } else if (matchedTCRecord.teacherName) {
+              tName = matchedTCRecord.teacherName;
+            } else {
+              tName = `Prof. ${String(tId).slice(0, 5)}`;
+            }
+          }
+
+          let slotsSelected: any[] = [];
+          if (matchedTCRecord && Array.isArray(matchedTCRecord.availability)) {
+            slotsSelected = matchedTCRecord.availability;
+          } else if (matchedTCRecord && typeof matchedTCRecord.availability === 'string') {
+            try {
+              slotsSelected = JSON.parse(matchedTCRecord.availability);
+            } catch (e) {}
+          }
+
+          if (slotsSelected.length === 0) {
+            for (const d of ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi']) {
+              for (const h of [7, 8, 9, 10, 11, 12, 13, 14]) {
+                slotsSelected.push({ day: d, hour: h });
+              }
+            }
+          }
+
+          demands.push({
+            courseClassId: cc.id,
+            courseName: course.name,
+            className: cc.class_name,
+            teacherId: tId,
+            teacherName: tName,
+            hoursNeeded: cc.hours_per_week || 4,
+            availableSlots: slotsSelected
+          });
+        }
+      }
+
+      if (demands.length === 0) {
+        throw new Error(isFr
+          ? "Aucun cours ou classe n'est configuré pour la génération. Veuillez d'abord ajouter des cours et les assigner aux professeurs."
+          : "Pa gen okenn matyè oswa klas ki konfigire pou jenerasyon an! Kreye yo anvan nan tab 'Cours & Classes' !"
+        );
+      }
+
+      // 3. EXECUTE CSP BACKTRACKING engine
+      const { success, grid } = generateAutoSchedule(demands, classNames);
+
+      if (success) {
+        setGenResult({
+          success: true,
+          grid,
+          classNames,
+          campus: cleanCampus
+        });
+        alert(isFr 
+          ? "Félicitations ! L'horaire a été généré parfaitement en respectant TOUTES vos contraintes !" 
+          : "Felisitasyon ! Orè a pwodwi byen kòrèk san okenn konfli !"
+        );
+      } else {
+        const greedyResult = runGreedyAutoSchedule(demands, classNames);
+        setGenResult({
+          success: false,
+          grid: greedyResult.grid,
+          unassignedDemands: greedyResult.unassigned,
+          classNames,
+          campus: cleanCampus
+        });
+        alert(isFr
+          ? "La configuration optimale n'a pas pu satisfaire toutes les contraintes horaires des professeurs. Le générateur a appliqué un horaire alternatif optimisé au mieux."
+          : "Nou djenere yon orè altènatif optimize paske disponiblite kèk pwofesè yo te serye anpil."
+        );
+      }
+
+    } catch (err: any) {
+      setGenError(err.message || 'Error occurred');
+    } finally {
+      setGenLoading(false);
+    }
+  };
+
+  const handleExportPDF = () => {
+    if (!genResult) return;
+    
+    try {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const cleanCampus = genResult.campus === 'fondamantal' ? 'Fondamental' : 'Secondaire';
+      
+      // Top Color decoration line
+      doc.setFillColor(1, 6, 87); // #010657
+      doc.rect(10, 10, 277, 22, 'F');
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(255, 255, 255);
+      doc.text("COLLEGE REFORMATEUR CODOSA", 16, 20);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(240, 240, 240);
+      doc.text(`Orè Ofisyèl — Campus: ${cleanCampus.toUpperCase()} — Ane Akademik: 2025-2026`, 16, 27);
+      
+      const headers = [["Heure", "Lundi / Lendi", "Mardi / Madi", "Mercredi / Mèkredi", "Jeudi / Jedi", "Vendredi / Vandredi"]];
+      
+      const hourSlots = [7, 8, 9, 10, 11, 12, 13, 14];
+      const daysList = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi'];
+      
+      const rows: any[] = [];
+      
+      for (const hour of hourSlots) {
+        const row = [`${hour}h - ${hour+1}h`];
+        
+        for (const day of daysList) {
+          const assignments: string[] = [];
+          for (const className of genResult.classNames) {
+            const assignment = genResult.grid[className]?.[day]?.[hour];
+            if (assignment) {
+              assignments.push(`${className}: ${assignment.courseName} (${assignment.teacherName})`);
+            }
+          }
+          row.push(assignments.length > 0 ? assignments.join('\n') : '—');
+        }
+        rows.push(row);
+      }
+      
+      (doc as any).autoTable({
+        startY: 38,
+        head: headers,
+        body: rows,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [1, 6, 87],
+          textColor: [255, 255, 255],
+          fontSize: 10,
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        bodyStyles: {
+          fontSize: 8,
+          valign: 'middle',
+          textColor: [40, 40, 40]
+        },
+        columnStyles: {
+          0: { cellWidth: 28, halign: 'center', fontStyle: 'bold' },
+          1: { cellWidth: 49 },
+          2: { cellWidth: 49 },
+          3: { cellWidth: 49 },
+          4: { cellWidth: 49 },
+          5: { cellWidth: 49 }
+        },
+        styles: {
+          cellPadding: 3,
+          overflow: 'linebreak'
+        }
+      });
+      
+      doc.save(`Horaire_CODOSA_${cleanCampus}_2025_2026.pdf`);
+      alert(isFr ? "Votre horaire PDF CODOSA officiel a été généré et téléchargé !" : "Orè PDF ofisyèl CODOSA ou a telechaje avèk siksè !");
+    } catch (e) {
+      console.error("PDF generation failed:", e);
+      alert("Error printing PDF: " + String(e));
+    }
+  };
 
   const days = [
     { id: 1, label: isFr ? 'Lundi' : 'Lendi', color: '#010657' },
@@ -785,26 +1211,36 @@ export default function Schedule() {
 
         {/* Admin Section Tabs Toggler */}
         {isAdminOrStaff && (
-          <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 self-start md:self-auto shrink-0 shadow-sm">
+          <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 self-start md:self-auto shrink-0 shadow-sm flex-wrap gap-1">
             <button 
               onClick={() => setActiveTab('schedules')}
               className={clsx(
-                "px-5 py-2.5 rounded-xl font-bold text-xs uppercase transition-all flex items-center space-x-2",
+                "px-4 py-2 rounded-xl font-bold text-[10px] uppercase transition-all flex items-center space-x-1.5",
                 activeTab === 'schedules' ? "bg-primary text-white shadow-md scale-105" : "text-gray-500 hover:text-primary"
               )}
             >
-              <Clock size={14} />
+              <Clock size={12} />
               <span>{isFr ? "Horaires" : "Orè"}</span>
             </button>
             <button 
               onClick={() => setActiveTab('classrooms')}
               className={clsx(
-                "px-5 py-2.5 rounded-xl font-bold text-xs uppercase transition-all flex items-center space-x-2",
+                "px-4 py-2 rounded-xl font-bold text-[10px] uppercase transition-all flex items-center space-x-1.5",
                 activeTab === 'classrooms' ? "bg-primary text-white shadow-md scale-105" : "text-gray-500 hover:text-primary"
               )}
             >
-              <Layers size={14} />
-              <span>Klas / Salles de classe</span>
+              <Layers size={12} />
+              <span>Salles de classe</span>
+            </button>
+            <button 
+              onClick={() => setActiveTab('generation')}
+              className={clsx(
+                "px-4 py-2 rounded-xl font-bold text-[10px] uppercase transition-all flex items-center space-x-1.5",
+                activeTab === 'generation' ? "bg-primary text-white shadow-md scale-105" : "text-gray-500 hover:text-primary"
+              )}
+            >
+              <CalendarIcon size={12} />
+              <span>{isFr ? "Générateur Automatique" : "Djenere Orè"}</span>
             </button>
           </div>
         )}
@@ -828,8 +1264,229 @@ export default function Schedule() {
         </div>
       )}
 
-      {/* 1. SCHEDULES ACTIVE VIEW */}
-      {activeTab === 'schedules' ? (
+      {/* Tab routing view block */}
+      {activeTab === 'generation' ? (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="text-left">
+              <h3 className="text-xl font-black text-primary uppercase flex items-center gap-2">
+                🚀 {isFr ? "Générateur Automatique d'Horaire" : "Djenere Orè Otomatikman"}
+              </h3>
+              <p className="text-xs font-bold text-gray-500 mt-1 max-w-xl">
+                {isFr 
+                  ? "Calculez et optimisez les créneaux d'études des professeurs de manière 100% automatisée sans conflits d'heures ou de salles." 
+                  : "Sistèm nan ap djenere orè yo otomatikman san okenn konfli lè ant pwofesè yo oswa klas yo."}
+              </p>
+            </div>
+            
+            <button
+              onClick={handleRunAutoGeneration}
+              disabled={genLoading}
+              className="bg-secondary text-white px-6 py-4 rounded-2xl font-black uppercase text-xs tracking-wider shadow-lg hover:bg-secondary/95 active:scale-95 transition-all flex items-center justify-center space-x-2 shrink-0 disabled:opacity-50 cursor-pointer"
+            >
+              {genLoading ? <div className="loader"></div> : <>
+                <CalendarIcon size={16} />
+                <span>{isFr ? "Générer l'horaire" : "Djenere Orè a"}</span>
+              </>}
+            </button>
+          </div>
+
+          {genError && (
+            <div className="p-4 bg-red-50 text-red-700 border border-red-100 rounded-2xl text-xs font-medium uppercase tracking-wide">
+              ❌ {genError}
+            </div>
+          )}
+
+          {/* Generated Result Container */}
+          {genResult ? (
+            <div className="space-y-6">
+              {/* Toolbar Buttons */}
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={handleExportPDF}
+                  className="bg-[#010657] text-white px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-wider hover:bg-[#010657]/90 active:scale-95 transition-all flex items-center space-x-2 cursor-pointer shadow-sm"
+                >
+                  📄 {isFr ? "Exporter au Format PDF d'Impression" : "Enprime nan PDF ofisyèl"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newSlots = { ...customSlots };
+                    const defaultColorPresets = [
+                      'border-l-indigo-600 bg-indigo-50/40 text-indigo-900||bg-indigo-100 text-indigo-600',
+                      'border-l-rose-600 bg-rose-50/40 text-rose-900||bg-rose-100 text-rose-600',
+                      'border-l-emerald-600 bg-emerald-50/40 text-emerald-950||bg-emerald-100 text-emerald-600',
+                      'border-l-amber-600 bg-amber-50/40 text-amber-900||bg-amber-100 text-amber-600'
+                    ];
+
+                    // Loop days and classes
+                    const daysMapping: Record<string, number> = { 'lundi': 1, 'mardi': 2, 'mercredi': 3, 'jeudi': 4, 'vendredi': 5 };
+                    
+                    for (const className of genResult.classNames) {
+                      const roomObj = classrooms.find(r => r.name === className);
+                      if (!roomObj) continue;
+                      const rId = roomObj.id;
+
+                      for (const [dayStr, dayId] of Object.entries(daysMapping)) {
+                        // Set Break
+                        newSlots[`${rId}_${dayId}_2`] = {
+                          name: "RÉCRÉATION (PAUSE)",
+                          prof: "Pas d'enseignant",
+                          color: "border-l-gray-400 bg-gray-50 text-gray-400 border-dashed border-2",
+                          iconBg: 'bg-gray-100 text-gray-500'
+                        };
+
+                        // idx 0 (7h-8h / 8h-9h helper)
+                        const s0 = genResult.grid[className]?.[dayStr]?.[7] || genResult.grid[className]?.[dayStr]?.[8];
+                        if (s0) {
+                          newSlots[`${rId}_${dayId}_0`] = {
+                            name: s0.courseName,
+                            prof: s0.teacherName,
+                            color: defaultColorPresets[0].split('||')[0],
+                            iconBg: defaultColorPresets[0].split('||')[1]
+                          };
+                        }
+
+                        // idx 1 (9h-10h / 10h helper)
+                        const s1 = genResult.grid[className]?.[dayStr]?.[9] || genResult.grid[className]?.[dayStr]?.[10];
+                        if (s1) {
+                          newSlots[`${rId}_${dayId}_1`] = {
+                            name: s1.courseName,
+                            prof: s1.teacherName,
+                            color: defaultColorPresets[1].split('||')[0],
+                            iconBg: defaultColorPresets[1].split('||')[1]
+                          };
+                        }
+
+                        // idx 3 (11h-12h / 12h helper)
+                        const s3 = genResult.grid[className]?.[dayStr]?.[11] || genResult.grid[className]?.[dayStr]?.[12];
+                        if (s3) {
+                          newSlots[`${rId}_${dayId}_3`] = {
+                            name: s3.courseName,
+                            prof: s3.teacherName,
+                            color: defaultColorPresets[2].split('||')[0],
+                            iconBg: defaultColorPresets[2].split('||')[1]
+                          };
+                        }
+
+                        // idx 4 (13h-14h / 14h helper)
+                        const s4 = genResult.grid[className]?.[dayStr]?.[13] || genResult.grid[className]?.[dayStr]?.[14];
+                        if (s4) {
+                          newSlots[`${rId}_${dayId}_4`] = {
+                            name: s4.courseName,
+                            prof: s4.teacherName,
+                            color: defaultColorPresets[3].split('||')[0],
+                            iconBg: defaultColorPresets[3].split('||')[1]
+                          };
+                        }
+                      }
+
+                      // Also set this class published state
+                      publishedClasses[rId] = true;
+                    }
+
+                    setCustomSlots(newSlots);
+                    setPublishedClasses(publishedClasses);
+                    localStorage.setItem('codosa_custom_slots_v3', JSON.stringify(newSlots));
+                    localStorage.setItem('codosa_published_classes_v3', JSON.stringify(publishedClasses));
+                    alert(isFr
+                      ? "L'horaire généré a été appliqué avec succès à toutes vos fiches d'étude de classe et publié !"
+                      : "Tout orè ki djenere yo sove epi pibliye avèk siksè pou tout klas yo !"
+                    );
+                    setActiveTab('schedules');
+                  }}
+                  className="bg-[#09b5f2] text-white px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-wider hover:opacity-95 active:scale-95 transition-all flex items-center space-x-2 cursor-pointer shadow-sm"
+                >
+                  💾 {isFr ? "Écraser & Publier l'Horaire Global" : "Aplike epi Pibliye Orè sa"}
+                </button>
+              </div>
+
+              {!genResult.success && genResult.unassignedDemands && (
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs space-y-2 text-[#010657]">
+                  <p className="font-extrabold flex items-center gap-1">
+                    ⚠️ {isFr ? "Heures alternatives non-assignées du fait des restrictions :" : "Nou anrejistre kèk ti kontrent sou orè yo :"}
+                  </p>
+                  <ul className="list-disc pl-5 font-mono text-[10px] space-y-1">
+                    {genResult.unassignedDemands.map((un: any, idx: number) => (
+                      <li key={idx}>
+                        {un.className} — {un.courseName} | {un.teacherName} ({un.missingHours}h manquantes)
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Master Full Campus Table Grid */}
+              <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm overflow-x-auto space-y-4">
+                <p className="text-xs font-black uppercase text-primary text-left tracking-wider">
+                  📅 {isFr ? "Grille d'occupation globale du Campus" : "Tablo orè konplè pou plizyè klas"}
+                </p>
+
+                <table className="w-full text-left font-sans text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-[#010657] text-white">
+                      <th className="p-3 border border-[#010657]/10 font-black uppercase tracking-wider text-[10px] text-center w-28">Heure</th>
+                      {['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'].map(d => (
+                        <th key={d} className="p-3 border border-[#010657]/10 font-black uppercase tracking-wider text-[10px]">{d}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[7, 8, 9, 10, 11, 12, 13, 14].map(hour => (
+                      <tr key={hour} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
+                        <td className="p-3 border border-gray-100 font-mono font-bold text-center bg-gray-50 text-gray-500">{hour}h - {hour+1}h</td>
+                        {['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi'].map(day => {
+                          const cleanDay = day.toLowerCase();
+                          const activeClasses: any[] = [];
+                          for (const className of genResult.classNames) {
+                            const match = genResult.grid[className]?.[cleanDay]?.[hour];
+                            if (match) {
+                              activeClasses.push({
+                                className,
+                                courseName: match.courseName,
+                                teacherName: match.teacherName,
+                                campus: genResult.campus
+                              });
+                            }
+                          }
+
+                          return (
+                            <td key={day} className="p-2 border border-gray-100 align-top min-w-[150px]">
+                              {activeClasses.length > 0 ? (
+                                <div className="space-y-2">
+                                  {activeClasses.map((ac, idx) => {
+                                    const campusColor = ac.campus === 'fondamantal' ? 'bg-[#09b5f2] text-white' : 'bg-[#fac900] text-[#010657]';
+                                    return (
+                                      <div key={idx} className={`${campusColor} p-2 rounded-xl text-[10px] font-bold leading-tight shadow-sm border border-black/5`}>
+                                        <p className="font-black text-xs leading-none mb-1">{ac.courseName}</p>
+                                        <p className="opacity-95 font-black tracking-wide uppercase text-[8px]">{ac.className}</p>
+                                        <p className="opacity-80 text-[9px] mt-1 border-t border-white/20 pt-1 font-sans">{ac.teacherName}</p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <span className="text-gray-300 font-mono text-[10px] block py-2 text-center">— Lib —</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white p-12 rounded-[2.5rem] border border-gray-100 shadow-sm text-center text-gray-400 font-bold uppercase text-xs space-y-4">
+              <CalendarIcon className="mx-auto text-[#010657]/15 animate-pulse" size={64} />
+              <p>{isFr ? "Cliquez sur générer pour lancer l'algorithme d'aide à la décision" : "Peze bouton jenerasyon an pou djenere orè lekòl la"}</p>
+            </div>
+          )}
+        </div>
+      ) : activeTab === 'schedules' ? (
         <div className="space-y-6">
           
           {classrooms.length === 0 ? (
@@ -1029,11 +1686,11 @@ export default function Schedule() {
               <p className="text-xs font-bold text-gray-500 mt-0.5">Ajoutez ou supprimez des salles de cours et gérez leurs capacités.</p>
             </div>
             <button
-              onClick={() => setShowAddClassroomModal(true)}
+              onClick={() => navigate('/salles')}
               className="bg-secondary text-white px-5 py-3 rounded-2xl font-black uppercase text-xs tracking-wider shadow-lg hover:bg-secondary/95 active:scale-95 transition-all flex items-center space-x-2 self-start"
             >
               <Plus size={16} />
-              <span>Ajouter une Salle</span>
+              <span>Gérer les Salles</span>
             </button>
           </div>
 

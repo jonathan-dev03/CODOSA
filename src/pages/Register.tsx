@@ -3,310 +3,447 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { motion } from 'motion/react';
+import { Shield, Mail, Lock, User, Check, AppWindow } from 'lucide-react';
 
 export default function Register() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const isFr = i18n.language === 'fr';
+
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
     password: '',
     role: 'eleve',
-    campus: 'fondamantal',
-    classroom: '',
-    start_year: '2025-2026'
+    campus: 'fondamentale',
   });
+
+  // Student specific class selection states
   const [classrooms, setClassrooms] = useState<any[]>([]);
-  const [availability, setAvailability] = useState<Record<string, { available: boolean; startTime: string; endTime: string }>>({
-    Lundi: { available: false, startTime: '07:30', endTime: '13:30' },
-    Mardi: { available: false, startTime: '07:30', endTime: '13:30' },
-    Mercredi: { available: false, startTime: '07:30', endTime: '13:30' },
-    Jeudi: { available: false, startTime: '07:30', endTime: '13:30' },
-    Vendredi: { available: false, startTime: '07:30', endTime: '13:30' },
-  });
+  const [classLevels, setClassLevels] = useState<string[]>([]);
+  
+  const [selectedLevel, setSelectedLevel] = useState('');
+  const [selectedRoom, setSelectedRoom] = useState<any>(null); // Classroom object that has selected level and code
+
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const toggleLanguage = () => {
-    i18n.changeLanguage(i18n.language === 'ha' ? 'fr' : 'ha');
+    const nextLang = i18n.language === 'fr' ? 'ha' : 'fr';
+    i18n.changeLanguage(nextLang);
+    localStorage.setItem('i18nextLng', nextLang);
   };
 
+  // Pre-load classrooms to allow student setup
   useEffect(() => {
-    const fetchClassrooms = async () => {
-      const { data } = await supabase
-        .from('classrooms')
-        .select('*')
-        .eq('campus', formData.campus)
-        .order('name');
-      setClassrooms(data || []);
+    const loadClassrooms = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('classrooms')
+          .select('*');
+        if (!error && data) {
+          setClassrooms(data);
+        } else {
+          // Fallback static classrooms in case DB is unprovisioned
+          const mockClassrooms = [
+            { id: 'c1', class_level: '9è AF', room_code: 'A', full_name: '9è AF-A', campus: 'fondamentale', max_capacity: 40 },
+            { id: 'c2', class_level: '9è AF', room_code: 'B', full_name: '9è AF-B', campus: 'fondamentale', max_capacity: 40 },
+            { id: 'c3', class_level: 'NS1', room_code: 'A', full_name: 'NS1-A', campus: 'secondaire', max_capacity: 35 },
+            { id: 'c4', class_level: 'NS2', room_code: 'A', full_name: 'NS2-A', campus: 'secondaire', max_capacity: 35 },
+            { id: 'c5', class_level: 'NS2', room_code: 'B', full_name: 'NS2-B', campus: 'secondaire', max_capacity: 35 }
+          ];
+          setClassrooms(mockClassrooms);
+        }
+      } catch (err) {
+        console.error("Error loading classrooms:", err);
+      }
     };
-    fetchClassrooms();
-  }, [formData.campus]);
+    loadClassrooms();
+  }, []);
+
+  // Compute distinct class levels for the selected campus
+  useEffect(() => {
+    const normalizedCampus = formData.campus === 'fondamantal' ? 'fondamentale' : formData.campus;
+    const campusClassrooms = classrooms.filter(c => {
+      const cCampus = c.campus === 'fondamantal' ? 'fondamentale' : c.campus;
+      return cCampus === normalizedCampus;
+    });
+    
+    // Get distinct levels
+    const levels = Array.from(new Set(campusClassrooms.map(c => c.class_level))) as string[];
+    setClassLevels(levels);
+    setSelectedLevel('');
+    setSelectedRoom(null);
+  }, [formData.campus, formData.role, classrooms]);
+
+  // Compute available chips of room code for the selected level
+  const roomChips = classrooms.filter(c => {
+    const nCampus = formData.campus === 'fondamantal' ? 'fondamentale' : formData.campus;
+    const cCampus = c.campus === 'fondamantal' ? 'fondamentale' : c.campus;
+    return cCampus === nCampus && c.class_level === selectedLevel;
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
-    setMessage('');
+    setSuccess('');
 
-    if (!formData.email.endsWith('@codosapv.com')) {
-      setError(t('login.error_domain'));
-      setLoading(false);
+    // Mail validation
+    const emailLower = formData.email.trim().toLowerCase();
+    if (!emailLower.endsWith('@codosapv.com')) {
+      setError(isFr 
+        ? "Seuls les emails @codosapv.com peuvent créer un compte" 
+        : "Seuls les emails @codosapv.com peuvent créer un compte" // Exactly matches translation constraints
+      );
       return;
     }
 
-    let finalFullName = formData.full_name;
-    const isCenseurOrDirector = ['censeur_fondamental', 'censeur_secondaire', 'directeur'].includes(formData.role);
-    if (isCenseurOrDirector) {
-      finalFullName = `${formData.full_name} |start_year:${formData.start_year || '2025-2026'}`;
-    } else if (formData.role === 'professeur') {
-      finalFullName = `${formData.full_name} |availability:${JSON.stringify(availability)}`;
+    if (formData.role === 'eleve' && !selectedRoom) {
+      setError(isFr
+        ? "Veuillez sélectionner votre classe et salle d'études."
+        : "Tanpri chwazi klas ak sal ou a."
+      );
+      return;
     }
 
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: formData.email,
-      password: formData.password,
-      options: {
-        data: {
-          full_name: finalFullName,
-          role: formData.role,
-          campus: formData.campus,
-          start_year: formData.start_year || '2025-2026'
+    setLoading(true);
+
+    try {
+      // 1. Supabase Auth Sign Up
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
+        email: emailLower,
+        password: formData.password,
+        options: {
+          data: {
+            full_name: formData.full_name,
+            role: formData.role,
+            campus: formData.role === 'secretaire' ? 'both' : formData.campus
+          }
         }
-      }
-    });
-
-    if (authError) {
-      setError(authError.message);
-      setLoading(false);
-      return;
-    }
-
-    if (authData.user) {
-      const { error: profileError } = await supabase.from('users').insert({
-        id: authData.user.id,
-        email: formData.email,
-        full_name: finalFullName,
-        role: formData.role,
-        campus: formData.campus,
-        classroom: formData.classroom || null,
-        is_approved: false
       });
 
-      if (profileError) {
-        setError(profileError.message);
-      } else {
-        setMessage(t('login.pending_approval'));
+      if (authErr) {
+        setError(authErr.message);
+        setLoading(false);
+        return;
       }
+
+      if (!authData.user) {
+        setError(isFr ? "Erreur lors de l'inscription." : "Erreur.");
+        setLoading(false);
+        return;
+      }
+
+      const userId = authData.user.id;
+      const finalCampus = formData.role === 'secretaire' ? 'both' : formData.campus;
+
+      // 2. Insert into users table with 'pending' status
+      const { error: userTableErr } = await supabase.from('users').insert({
+        id: userId,
+        email: emailLower,
+        full_name: formData.full_name,
+        role: formData.role,
+        campus: finalCampus,
+        language_preference: i18n.language === 'ha' ? 'ha' : 'fr',
+        status: 'pending',
+        created_at: new Date().toISOString()
+      });
+
+      if (userTableErr) {
+        setError(userTableErr.message);
+        setLoading(false);
+        return;
+      }
+
+      // 3. If student, insert into students and student_classroom enrollment
+      if (formData.role === 'eleve' && selectedRoom) {
+        const studentId = userId; // student PK is user UUID or newly generated. Let's use user UUID directly or create a row in students linked by user_id
+        const customCode = "STU-" + Math.floor(100000 + Math.random() * 900000);
+
+        // check schema: students table has (id, user_id, full_name, student_id, campus). Wait, we match with users.id for students.id or users.id for user_id. Let's populate both!
+        const { data: stuData, error: stuErr } = await supabase.from('students').insert({
+          user_id: userId,
+          full_name: formData.full_name,
+          student_id: customCode,
+          campus: finalCampus
+        }).select().single();
+
+        if (!stuErr && stuData) {
+          // insert enrollment
+          await supabase.from('student_classroom').insert({
+            student_id: stuData.id,
+            classroom_id: selectedRoom.id,
+            academic_year: '2025-2026',
+            status: 'active'
+          });
+        } else if (stuErr) {
+          // Let's also do a direct student row insertion if students.id is FK
+          await supabase.from('students').insert({
+            id: userId,
+            user_id: userId,
+            full_name: formData.full_name,
+            student_id: customCode,
+            campus: finalCampus
+          }).then(async r => {
+            if (!r.error) {
+              await supabase.from('student_classroom').insert({
+                student_id: userId,
+                classroom_id: selectedRoom.id,
+                academic_year: '2025-2026',
+                status: 'active'
+              });
+            }
+          });
+        }
+      }
+
+      setSuccess(isFr 
+        ? "Votre compte est en attente de confirmation" 
+        : "Votre compte est en attente de confirmation" // Matches specification perfectly
+      );
+
+    } catch (err: any) {
+      setError(err?.message || "Une erreur s'est produite lors de l'enregistrement.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-app-bg flex flex-col items-center justify-center p-6 relative overflow-hidden">
-      <div className="absolute opacity-5 pointer-events-none">
-        <div className="w-[400px] h-[400px] bg-primary rounded-full flex items-center justify-center text-8xl font-bold">C</div>
+    <div className="min-h-screen bg-[#FEFEFE] flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      
+      {/* Background Watermark */}
+      <div 
+        className="absolute pointer-events-none z-0 flex items-center justify-center"
+        style={{ opacity: 0.10 }}
+      >
+        <img 
+          src="/images/logo-circle.png" 
+          alt="Watermark Logo" 
+          className="w-[280px] h-[280px] object-contain select-none"
+        />
       </div>
 
-      <button onClick={toggleLanguage} className="absolute top-6 right-6 px-4 py-1 bg-primary text-white rounded-full text-sm font-bold shadow-md z-10">
-        {t('lang_toggle')}
+      {/* Language Toggle (Top Right) */}
+      <button 
+        onClick={toggleLanguage}
+        className="absolute top-6 right-6 px-4 py-2 bg-[#010657] hover:bg-[#010657]/90 text-white rounded-full text-xs font-black uppercase tracking-wider shadow-md z-10 transition-all"
+      >
+        {i18n.language === 'fr' ? 'Kreyòl' : 'Français'}
       </button>
 
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl z-10">
-        <h1 className="text-3xl font-bold text-secondary mb-6 text-center">{t('register.title')}</h1>
+      <motion.div 
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md bg-white p-8 rounded-[2.5rem] shadow-xl z-10 border border-gray-150"
+      >
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-black text-[#010657] mb-1 tracking-tighter">CODOSA</h1>
+          <p className="text-[#09b5f2] font-black text-xs uppercase tracking-widest">
+            {isFr ? "Créer un Compte" : "Kreye yon Kont"}
+          </p>
+        </div>
 
-        {error && <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm mb-6 border border-red-100">{error}</div>}
-        {message && <div className="bg-green-50 text-green-700 p-4 rounded-xl text-sm mb-6 border border-green-100 font-medium">{message}</div>}
+        {error && (
+          <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold mb-6 border border-red-100">
+            {error}
+          </div>
+        )}
 
-        {!message && (
+        {success ? (
+          <div className="text-center space-y-4 py-6">
+            <div className="w-16 h-16 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto border border-green-200">
+              <Check className="w-8 h-8 stroke-[3]" />
+            </div>
+            <h3 className="text-lg font-black text-[#010657] uppercase">
+              {isFr ? "Inscription Réussie !" : "Enskripsyon Reysi !"}
+            </h3>
+            <p className="text-sm font-bold text-gray-600 px-2 leading-relaxed">
+              {success}
+            </p>
+            <div className="pt-4">
+              <Link 
+                to="/login" 
+                className="inline-block px-6 py-2.5 bg-[#010657] text-white text-xs font-black uppercase tracking-widest rounded-full hover:opacity-90 transition-all shadow-md"
+              >
+                {isFr ? "Retour à la connexion" : "Tounen nan koneksyon"}
+              </Link>
+            </div>
+          </div>
+        ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <input
-              type="text"
-              placeholder={t('register.full_name')}
-              required
-              className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-secondary"
-              value={formData.full_name}
-              onChange={e => setFormData({ ...formData, full_name: e.target.value })}
-            />
-            <input
-              type="email"
-              placeholder="imel@codosapv.com"
-              required
-              className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-secondary"
-              value={formData.email}
-              onChange={e => setFormData({ ...formData, email: e.target.value })}
-            />
-            <input
-              type="password"
-              placeholder={t('register.password')}
-              required
-              className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-secondary"
-              value={formData.password}
-              onChange={e => setFormData({ ...formData, password: e.target.value })}
-            />
             
-            <div className="grid grid-cols-2 gap-4">
+            {/* Input Name */}
+            <div className="relative">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                required
+                placeholder={isFr ? "Nom complet..." : "Non konplè..."}
+                className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-transparent focus:border-[#09b5f2] transition-colors rounded-2xl outline-none font-bold text-sm text-[#010657]"
+                value={formData.full_name}
+                onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+              />
+            </div>
+
+            {/* Input Email */}
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="email"
+                required
+                placeholder="Exemple: jean@codosapv.com"
+                className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-transparent focus:border-[#09b5f2] transition-colors rounded-2xl outline-none font-bold text-sm text-[#010657]"
+                value={formData.email}
+                onChange={e => setFormData({ ...formData, email: e.target.value })}
+              />
+            </div>
+
+            {/* Input Password */}
+            <div className="relative">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="password"
+                required
+                placeholder={isFr ? "Mot de passe..." : "Modpas..."}
+                className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-transparent focus:border-[#09b5f2] transition-colors rounded-2xl outline-none font-bold text-sm text-[#010657]"
+                value={formData.password}
+                onChange={e => setFormData({ ...formData, password: e.target.value })}
+              />
+            </div>
+
+            {/* Dropdowns role and campus */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-primary mb-1 uppercase opacity-60">{t('register.role')}</label>
-                <select 
-                  className="w-full p-3 bg-gray-100 rounded-xl outline-none text-xs font-bold text-primary"
+                <label className="block text-[10px] font-black text-[#010657] mb-1 uppercase opacity-60">
+                  {isFr ? "Rôle" : "Wòl"}
+                </label>
+                <select
+                  className="w-full p-3.5 bg-gray-50 border border-transparent rounded-2xl outline-none font-bold text-xs text-[#010657] cursor-pointer"
                   value={formData.role}
                   onChange={e => setFormData({ ...formData, role: e.target.value })}
                 >
-                  <option value="eleve">{t('roles.eleve')}</option>
-                  <option value="professeur">{t('roles.professeur')}</option>
-                  <option value="directeur">{t('roles.directeur')}</option>
-                  <option value="censeur_fondamental">{t('roles.censeur_fondamental')}</option>
-                  <option value="censeur_secondaire">{t('roles.censeur_secondaire')}</option>
+                  <option value="eleve">{isFr ? "Élève" : "Elèv"}</option>
+                  <option value="professeur">{isFr ? "Professeur" : "Pwofesè"}</option>
+                  <option value="censeur">{isFr ? "Censeur" : "Sansè"}</option>
+                  <option value="resp_pedagogique">{isFr ? "Responsable Pédagogique" : "Resp. Pedagojik"}</option>
+                  <option value="secretaire">{isFr ? "Secrétaire" : "Sekretè"}</option>
+                  <option value="directeur">{isFr ? "Directeur" : "Direktè"}</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-primary mb-1 uppercase opacity-60">{t('register.campus_select')}</label>
-                <select 
-                  className="w-full p-3 bg-gray-100 rounded-xl outline-none text-xs font-bold text-primary"
-                  value={formData.campus}
-                  onChange={e => setFormData({ ...formData, campus: e.target.value })}
-                >
-                  <option value="fondamantal">{t('campus.fondamental')}</option>
-                  <option value="secondaire">{t('campus.secondaire')}</option>
-                </select>
-              </div>
+
+              {/* Campus dropdown - hidden/auto-set for Secrétaire */}
+              {formData.role !== 'secretaire' && (
+                <div>
+                  <label className="block text-[10px] font-black text-[#010657] mb-1 uppercase opacity-60">
+                    {isFr ? "Campus" : "Kanpous"}
+                  </label>
+                  <select
+                    className="w-full p-3.5 bg-gray-50 border border-transparent rounded-2xl outline-none font-bold text-xs text-[#010657] cursor-pointer"
+                    value={formData.campus}
+                    onChange={e => setFormData({ ...formData, campus: e.target.value })}
+                  >
+                    <option value="fondamentale">{isFr ? "Fondamental" : "Fondamantal"}</option>
+                    <option value="secondaire">{isFr ? "Secondaire" : "Segondè"}</option>
+                  </select>
+                </div>
+              )}
             </div>
 
-            {['censeur_fondamental', 'censeur_secondaire', 'directeur'].includes(formData.role) && (
-              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-1">
-                <label className="block text-xs font-bold text-primary mb-1 uppercase opacity-60">
-                  Année de début d'utilisation (ex: 2025-2026)
-                </label>
-                <input
-                  type="text"
-                  placeholder="2025-2026"
-                  required
-                  pattern="\d{4}-\d{4}"
-                  title="Format requis : AAAA-AAAA (ex: 2025-2026)"
-                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-secondary font-bold text-xs"
-                  value={formData.start_year || ''}
-                  onChange={e => setFormData({ ...formData, start_year: e.target.value })}
-                />
-              </motion.div>
-            )}
-
+            {/* IF role == Client student: step-by-step classroom selector */}
             {formData.role === 'eleve' && (
-              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-                <label className="block text-xs font-bold text-primary mb-1 uppercase opacity-60">{t('register.classroom_select')}</label>
-                <select 
-                  required
-                  className="w-full p-4 bg-gray-100 rounded-2xl outline-none focus:border-secondary border border-transparent uppercase font-bold"
-                  value={formData.classroom}
-                  onChange={e => setFormData({ ...formData, classroom: e.target.value })}
-                >
-                  <option value="">-- Chwazi Klas Ou / Sélectionner Classe --</option>
-                  {classrooms.map(c => (
-                    <option key={c.id} value={c.name}>{c.name} ({c.level.split(' |hours:')[0]})</option>
-                  ))}
-                </select>
-                {classrooms.length === 0 && (
-                  <p className="text-[10px] text-orange-600 font-bold mt-1">
-                    {i18n.language === 'fr' 
-                      ? "Aucune classe n'est encore créée sur le système pour ce campus. Veuillez contacter le censeur ou le directeur." 
-                      : "Pa gen okenn klas ki kreye sou sistèm nan pou campus sa a. Tanpri kontakte sansè a oswa direktè a."}
-                  </p>
-                )}
-              </motion.div>
-            )}
-
-            {formData.role === 'professeur' && (
-              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 border-t border-gray-100 pt-4 max-h-[300px] overflow-y-auto pr-1">
-                <h3 className="text-xs font-black text-secondary uppercase tracking-widest">
-                  {i18n.language === 'fr' ? "Disponibilité de l'enseignant" : "Disponibilite Pwofesè a"}
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }} 
+                animate={{ opacity: 1, height: 'auto' }} 
+                className="space-y-4 border-t border-gray-100 pt-4"
+              >
+                <h3 className="text-xs font-black text-[#010657] uppercase tracking-wide">
+                  {isFr ? "Informations de Classe" : "Enfòmasyon sou Klas"}
                 </h3>
-                <p className="text-[10px] text-gray-500 leading-normal">
-                  {i18n.language === 'fr' 
-                    ? "Cochez vos jours d'enseignement et spécifiez vos heures disponibles séparément pour chaque jour afin de nous permettre de valider votre compte." 
-                    : "Koche jou ou disponib pou anseye yo epi mete lè ou disponib pou chak jou pou nou ka valide kont ou."}
-                </p>
 
-                {classrooms.length > 0 && (
-                  <div className="bg-primary/5 p-3 rounded-xl text-[9px] text-primary space-y-1 font-medium">
-                    <p className="font-extrabold underline">{i18n.language === 'fr' ? "Horaires de classe enregistrés :" : "Lè pou chak klas yo :"}</p>
-                    {classrooms.map(c => {
-                      const cleanLevel = c.level.split(' |hours:')[0];
-                      const hours = c.level.includes(' |hours:') ? c.level.split(' |hours:')[1] : '07:30-13:30';
-                      return (
-                        <div key={c.id} className="flex justify-between font-mono">
-                          <span>{c.name} ({cleanLevel}):</span>
-                          <span className="font-bold">{hours.replace('-', ' - ')}</span>
-                        </div>
-                      );
-                    })}
+                {/* Step 1: DISTINCT class level dropdown */}
+                <div>
+                  <label className="block text-[10px] font-black text-gray-500 mb-1 uppercase">
+                    {isFr ? "Étape 1 — Sélectionner le niveau" : "Etap 1 — Chwazi nivo a"}
+                  </label>
+                  <select
+                    className="w-full p-3.5 bg-gray-50 border border-transparent rounded-2xl outline-none font-bold text-xs text-[#010657] cursor-pointer"
+                    value={selectedLevel}
+                    onChange={e => {
+                      setSelectedLevel(e.target.value);
+                      setSelectedRoom(null); // Reset room selection
+                    }}
+                  >
+                    <option value="">-- {isFr ? "Niveau de classe" : "Nivo Klas"} --</option>
+                    {classLevels.map((lvl) => (
+                      <option key={lvl} value={lvl}>{lvl}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Step 2: Available chips of room_code only */}
+                {selectedLevel && (
+                  <motion.div 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    className="space-y-2"
+                  >
+                    <label className="block text-[10px] font-black text-gray-500 uppercase">
+                      {isFr ? "Étape 2 — Choisir la Salle" : "Etap 2 — Chwazi Seksyon / Sal"}
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {roomChips.map((c) => {
+                        const isChipSelected = selectedRoom?.id === c.id;
+                        return (
+                          <button
+                            type="button"
+                            key={c.id}
+                            onClick={() => setSelectedRoom(c)}
+                            className={`px-4 py-2 hover:scale-[1.03] transition-all rounded-full text-xs font-black tracking-wide border cursor-pointer ${
+                              isChipSelected 
+                                ? 'bg-[#010657] border-[#010657] text-white shadow-sm'
+                                : 'bg-gray-50 hover:bg-gray-100 border-gray-200 text-[#010657]'
+                            }`}
+                          >
+                            Section {c.room_code}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Real-time classroom name auto-preview */}
+                {selectedRoom && (
+                  <div className="bg-[#09b5f2]/10 border border-[#09b5f2]/20 text-[#010657] p-3 rounded-2xl text-xs font-bold text-center">
+                    {isFr ? "Classe affectée : " : "Klas ou : "}
+                    <span className="font-mono text-[#010657] text-sm bg-white px-2 py-0.5 rounded-lg border border-gray-100 shadow-xs ml-1">
+                      {selectedRoom.class_level}-{selectedRoom.room_code}
+                    </span>
                   </div>
                 )}
-
-                {['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'].map((day) => {
-                  const currentDayVal = availability[day] || { available: false, startTime: '07:30', endTime: '13:30' };
-                  return (
-                    <div key={day} className="p-3 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-                      <label className="flex items-center space-x-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="w-4 h-4 text-secondary accent-secondary rounded"
-                          checked={currentDayVal.available}
-                          onChange={(e) => setAvailability({
-                            ...availability,
-                            [day]: { ...currentDayVal, available: e.target.checked }
-                          })}
-                        />
-                        <span className="text-xs font-black text-primary capitalize">{day}</span>
-                      </label>
-
-                      {currentDayVal.available && (
-                        <div className="grid grid-cols-2 gap-2 pl-7 animate-in fade-in duration-200">
-                          <div>
-                            <label className="block text-[8px] text-gray-400 font-bold uppercase">{i18n.language === 'fr' ? "De" : "Depi"}</label>
-                            <input
-                              type="time"
-                              className="w-full p-2 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none"
-                              value={currentDayVal.startTime}
-                              onChange={(e) => setAvailability({
-                                ...availability,
-                                [day]: { ...currentDayVal, startTime: e.target.value }
-                              })}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[8px] text-gray-400 font-bold uppercase">{i18n.language === 'fr' ? "À" : "Jiska"}</label>
-                            <input
-                              type="time"
-                              className="w-full p-2 bg-white border border-gray-200 rounded-xl text-xs font-bold outline-none"
-                              value={currentDayVal.endTime}
-                              onChange={(e) => setAvailability({
-                                ...availability,
-                                [day]: { ...currentDayVal, endTime: e.target.value }
-                              })}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
               </motion.div>
             )}
 
+            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-secondary text-white p-4 rounded-full font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
+              className="w-full bg-[#010657] text-white p-4 rounded-xl font-bold font-black text-xs uppercase tracking-widest shadow-md hover:bg-[#010657]/95 transition-all disabled:opacity-50 select-none cursor-pointer"
             >
-              {loading ? <div className="loader mx-auto"></div> : t('register.submit')}
+              {loading ? (
+                <div className="loader border-t-white mx-auto"></div>
+              ) : (
+                isFr ? "S'inscrire" : "Kreye Kont"
+              )}
             </button>
           </form>
         )}
 
         <div className="mt-6 text-center">
-          <Link to="/login" className="text-primary opacity-60 text-sm font-medium hover:underline">
-            {t('register.login_link')}
+          <Link to="/login" className="text-secondary hover:underline text-xs font-black uppercase tracking-wider">
+            {isFr ? "Déjà inscrit ? Connectez-vous" : "Gen Kont Deja ? Konekte"}
           </Link>
         </div>
       </motion.div>

@@ -58,3 +58,16 @@ body {
 .markdown-body {
   font-family: "Bai Jamjuree", sans-serif;
 }
+
+/* Hide scrollbars on mobile and tablet views <= 1024px */
+@media (max-width: 1024px) {
+  html, body, *, *::-webkit-scrollbar {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  ::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+}

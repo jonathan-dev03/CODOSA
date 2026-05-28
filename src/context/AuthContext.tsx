@@ -7,7 +7,9 @@ interface AuthContextType {
   profile: any | null;
   loading: boolean;
   isGuest: boolean;
-  setGuestMode: (enabled: boolean) => void;
+  activeCampus: string;
+  setActiveCampus: (campus: 'fondamentale' | 'secondaire') => void;
+  setGuestMode: (role?: string, campus?: string) => void;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -49,7 +51,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         raw_full_name: data.full_name, // original backed up
         full_name: rawName,
         start_year: startYear,
-        active_year: activeYearStr || startYear
+        active_year: activeYearStr || startYear,
+        is_approved: data.status === 'active' || data.is_approved === true
       });
     }
   };
@@ -58,16 +61,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user) await fetchProfile(user.id);
   };
 
-  const setGuestMode = (role: string = 'eleve') => {
+  const setGuestMode = (role: string = 'eleve', campus: string = 'fondamantal') => {
     setIsGuest(true);
     // Mock profile for guest
     setProfile({
       full_name: 'Invite - ' + (role.charAt(0).toUpperCase() + role.slice(1)),
       role: role,
-      campus: 'fondamantal',
+      campus: campus,
       is_approved: true
     });
   };
+
+  const [directeurCampus, setDirecteurCampus] = useState<'fondamentale' | 'secondaire'>('fondamentale');
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -89,8 +94,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsGuest(false);
   };
 
+  const activeCampus = profile?.role === 'directeur' ? directeurCampus : (profile?.campus || 'fondamentale');
+  const setActiveCampus = (campus: 'fondamentale' | 'secondaire') => {
+    if (profile?.role === 'directeur') {
+      setDirecteurCampus(campus);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isGuest, setGuestMode, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, isGuest, activeCampus, setActiveCampus, setGuestMode, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

@@ -7,7 +7,7 @@ import { Bell, Info, MapPin, Phone, Mail, Award } from 'lucide-react';
 
 export default function Home() {
   const { t, i18n } = useTranslation();
-  const { profile } = useAuth();
+  const { profile, activeCampus } = useAuth();
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,7 +41,7 @@ export default function Home() {
              {profile?.full_name?.split(' ')[0]},<br/>
              <span className="text-accent">{t('home.tagline')}</span>
           </h1>
-          <p className="text-white/80 text-sm font-medium mb-6">Campus {profile?.campus?.toUpperCase()} — {profile?.role?.toUpperCase()}</p>
+          <p className="text-white/80 text-sm font-medium mb-6">Campus {activeCampus?.toUpperCase()} — {profile?.role?.toUpperCase()}</p>
           
           <div className="flex space-x-3">
              {(profile?.role === 'directeur' || profile?.role === 'professeur') && (

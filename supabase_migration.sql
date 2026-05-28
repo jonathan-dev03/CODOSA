@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL,
   full_name TEXT NOT NULL,
   role TEXT NOT NULL,
-  campus TEXT CHECK (campus IN ('fondamantal', 'secondaire', 'both')),
+  campus TEXT CHECK (campus IN ('fondamantal', 'fondamentale', 'secondaire', 'both')),
   is_approved BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -191,29 +191,37 @@ CREATE OR REPLACE FUNCTION get_my_role() RETURNS text AS $$ SELECT role FROM use
 CREATE OR REPLACE FUNCTION get_my_campus() RETURNS text AS $$ SELECT campus FROM users WHERE id = auth.uid(); $$ LANGUAGE sql SECURITY DEFINER;
 
 -- Users policies
-CREATE POLICY "user_read_profile" ON users FOR SELECT USING (auth.uid() = id OR get_my_role() IN ('super_admin', 'directeur', 'censeur_fondamental', 'censeur_secondaire'));
+CREATE POLICY "user_read_profile" ON users FOR SELECT USING (
+  auth.uid() = id 
+  OR get_my_role() IN ('super_admin', 'directeur')
+  OR (get_my_role() = 'censeur' AND (get_my_campus() = campus OR get_my_campus() = 'both' OR campus = 'both' OR get_my_campus() IN ('fondamantal', 'fondamentale') AND campus IN ('fondamantal', 'fondamentale')))
+);
 CREATE POLICY "user_update_own" ON users FOR UPDATE USING (auth.uid() = id);
 
 -- Discipline logs
 CREATE POLICY "discipline_access" ON discipline_logs FOR ALL USING (
   get_my_role() IN ('super_admin','directeur')
-  OR (get_my_role() = 'censeur_fondamental' AND campus = 'fondamantal')
-  OR (get_my_role() = 'censeur_secondaire'  AND campus = 'secondaire')
-  OR (get_my_role() = 'resp_ped_fondamental' AND campus = 'fondamantal')
-  OR (get_my_role() = 'resp_ped_secondaire'  AND campus = 'secondaire')
-  OR (get_my_role() = 'resp_discipline'      AND campus = 'fondamantal')
+  OR (get_my_role() IN ('censeur', 'resp_pedagogique', 'resp_discipline') AND (campus = get_my_campus() OR (campus IN ('fondamantal', 'fondamentale') AND get_my_campus() IN ('fondamantal', 'fondamentale'))))
   OR (get_my_role() = 'eleve' AND student_id = auth.uid())
 );
 
 -- Schedules
 CREATE POLICY "schedule_read" ON schedules FOR SELECT USING (
-  get_my_role() IN ('super_admin','directeur', 'censeur_fondamental','censeur_secondaire', 'resp_ped_fondamental','resp_ped_secondaire')
-  OR (published = true AND (get_my_campus() = campus OR get_my_campus() = 'both'))
+  get_my_role() IN ('super_admin','directeur')
+  OR (get_my_role() IN ('censeur', 'resp_pedagogique') AND (campus = get_my_campus() OR get_my_campus() = 'both' OR (campus IN ('fondamantal', 'fondamentale') AND get_my_campus() IN ('fondamantal', 'fondamentale'))))
+  OR (published = true AND (get_my_campus() = campus OR get_my_campus() = 'both' OR (campus IN ('fondamantal', 'fondamentale') AND get_my_campus() IN ('fondamantal', 'fondamentale'))))
 );
 
 -- Homework
-CREATE POLICY "homework_professor" ON homework FOR ALL USING ( professor_id = auth.uid() OR get_my_role() IN ('super_admin','directeur', 'censeur_fondamental','censeur_secondaire') );
-CREATE POLICY "homework_student_read" ON homework FOR SELECT USING ( get_my_role() = 'eleve' AND campus = get_my_campus() );
+CREATE POLICY "homework_professor" ON homework FOR ALL USING (
+  professor_id = auth.uid() 
+  OR get_my_role() IN ('super_admin','directeur')
+  OR (get_my_role() = 'censeur' AND (campus = get_my_campus() OR get_my_campus() = 'both' OR (campus IN ('fondamantal', 'fondamentale') AND get_my_campus() IN ('fondamantal', 'fondamentale'))))
+);
+CREATE POLICY "homework_student_read" ON homework FOR SELECT USING (
+  get_my_role() = 'eleve' 
+  AND (campus = get_my_campus() OR (campus IN ('fondamantal', 'fondamentale') AND get_my_campus() IN ('fondamantal', 'fondamentale')))
+);
 
 -- Notifications
 CREATE POLICY "notif_own" ON notifications FOR ALL USING ( user_id = auth.uid() );
@@ -230,5 +238,30 @@ CREATE POLICY "announcements_read" ON announcements FOR SELECT USING (
 CREATE POLICY "journal_read" ON journal_articles FOR SELECT USING (
   status = 'published'
   OR author_id = auth.uid()
-  OR get_my_role() IN ('super_admin','directeur', 'censeur_fondamental','censeur_secondaire', 'resp_ped_fondamental','resp_ped_secondaire')
+  OR get_my_role() IN ('super_admin','directeur', 'censeur', 'resp_pedagogique')
 );
+
+-- Classrooms columns update for new system
+ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS class_level TEXT;
+ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS room_code TEXT;
+ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS max_capacity INTEGER;
+
+-- student_classroom table
+CREATE TABLE IF NOT EXISTS student_classroom (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID REFERENCES students(id) ON DELETE CASCADE,
+  classroom_id UUID REFERENCES classrooms(id) ON DELETE CASCADE,
+  academic_year TEXT NOT NULL,
+  status TEXT CHECK (status IN ('active', 'inactive', 'alumni')) DEFAULT 'active',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE student_classroom ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "student_classroom_select" ON student_classroom FOR SELECT USING (true);
+CREATE POLICY "student_classroom_all" ON student_classroom FOR ALL USING (
+  get_my_role() IN ('super_admin', 'directeur', 'censeur', 'resp_pedagogique')
+  OR auth.uid() = student_id
+);
+

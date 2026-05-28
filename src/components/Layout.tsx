@@ -1,20 +1,21 @@
 import { useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Home, BookOpen, ShieldAlert, Calendar, User, Bell, GraduationCap, Users } from 'lucide-react';
+import { Home, BookOpen, ShieldAlert, Calendar, User, Bell, GraduationCap, Users, Layers } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function Layout() {
-  const { t } = useTranslation();
-  const { profile } = useAuth();
+  const { t, i18n } = useTranslation();
+  const { profile, activeCampus, setActiveCampus } = useAuth();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const isStaff = profile?.role !== 'eleve' && profile?.role !== 'professeur';
   const showDiscipline = profile?.role !== 'eleve'; // Teachers can see it too in some views or just filtered? User said: hidden for eleve and professeur.
   const canAccessDiscipline = !['eleve', 'professeur'].includes(profile?.role);
   const canAccessDirectory = profile?.role !== 'eleve';
+  const isFr = i18n.language === 'fr';
 
   return (
     <div className="min-h-screen bg-app-bg flex flex-col lg:flex-row">
@@ -59,10 +60,23 @@ export default function Layout() {
             </NavLink>
           )}
 
-          <NavLink to="/schedule" className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-2xl transition-all font-bold", isActive ? "bg-accent text-primary shadow-xl scale-105" : "hover:bg-white/5 opacity-60 hover:opacity-100")}>
+          <NavLink to="/horaire" className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-2xl transition-all font-bold", isActive ? "bg-accent text-primary shadow-xl scale-105" : "hover:bg-white/5 opacity-60 hover:opacity-100")}>
             <Calendar size={20} />
             <span className="uppercase text-xs tracking-widest">{t('nav.schedule')}</span>
           </NavLink>
+
+          {isStaff && (
+            <>
+              <NavLink to="/courses" className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-2xl transition-all font-bold", isActive ? "bg-accent text-primary shadow-xl scale-105" : "hover:bg-white/5 opacity-60 hover:opacity-100")}>
+                <BookOpen size={20} />
+                <span className="uppercase text-xs tracking-widest">{isFr ? "Cours & Classes" : "Jesyon Klas"}</span>
+              </NavLink>
+              <NavLink to="/salles" className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-2xl transition-all font-bold", isActive ? "bg-accent text-primary shadow-xl scale-105" : "hover:bg-white/5 opacity-60 hover:opacity-100")}>
+                <Layers size={20} />
+                <span className="uppercase text-xs tracking-widest">{isFr ? "Gestion des Salles" : "Jesyon Salles"}</span>
+              </NavLink>
+            </>
+          )}
 
           {canAccessDirectory && (
             <>
@@ -116,6 +130,34 @@ export default function Layout() {
           <div className="hidden lg:block">
              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-primary/40">Dashboard Platfòm</h2>
           </div>
+
+          {/* Directeur campus switcher */}
+          {profile?.role === 'directeur' && (
+            <div className="flex items-center bg-[#fac900]/10 lg:bg-primary/5 p-1 rounded-full border border-gray-200 shadow-inner z-50">
+              <button 
+                onClick={() => setActiveCampus('fondamentale')}
+                className={clsx(
+                  "px-3 py-1 rounded-full text-[10px] font-black transition-all cursor-pointer",
+                  activeCampus === 'fondamentale' 
+                    ? "bg-[#fac900] text-[#010657] shadow-md scale-102" 
+                    : "text-gray-400 lg:text-gray-500 hover:text-white lg:hover:text-primary"
+                )}
+              >
+                FONDAMENTAL
+              </button>
+              <button 
+                onClick={() => setActiveCampus('secondaire')}
+                className={clsx(
+                  "px-3 py-1 rounded-full text-[10px] font-black transition-all cursor-pointer",
+                  activeCampus === 'secondaire' 
+                    ? "bg-[#fac900] text-[#010657] shadow-md scale-102" 
+                    : "text-gray-400 lg:text-gray-500 hover:text-white lg:hover:text-primary"
+                )}
+              >
+                SECONDAIRE
+              </button>
+            </div>
+          )}
 
           <div className="flex items-center space-x-4">
              <div className="relative cursor-pointer">
@@ -197,10 +239,23 @@ export default function Layout() {
                     <span className="uppercase text-xs tracking-widest">{t('nav.discipline')}</span>
                   </NavLink>
                 )}
-                <NavLink to="/schedule" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
+                <NavLink to="/horaire" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
                   <Calendar size={18} />
                   <span className="uppercase text-xs tracking-widest">{t('nav.schedule')}</span>
                 </NavLink>
+
+                {isStaff && (
+                  <>
+                    <NavLink to="/courses" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
+                      <BookOpen size={18} />
+                      <span className="uppercase text-xs tracking-widest">{isFr ? "Cours & Classes" : "Jesyon Klas"}</span>
+                    </NavLink>
+                    <NavLink to="/salles" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
+                      <Layers size={18} />
+                      <span className="uppercase text-xs tracking-widest">{isFr ? "Gestion des Salles" : "Jesyon Salles"}</span>
+                    </NavLink>
+                  </>
+                )}
                 {canAccessDirectory && (
                   <>
                     <NavLink to="/professors" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
@@ -228,30 +283,30 @@ export default function Layout() {
       </AnimatePresence>
 
       {/* Bottom Navigation (Only visible on mobile) */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.08)] z-50 h-20 border-t border-gray-100 lg:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 bg-[#010657] shadow-[0_-4px_20px_rgba(0,0,0,0.15)] z-50 h-20 border-t border-white/5 lg:hidden">
         <div className="flex items-center justify-around h-full max-w-md mx-auto">
-          <NavLink to="/home" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-secondary scale-110" : "text-primary opacity-40")}>
+          <NavLink to="/home" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-[#fac900] scale-110" : "text-white opacity-60")}>
             <Home size={24} />
             <span className="text-[10px] font-bold uppercase">{t('nav.home')}</span>
           </NavLink>
-          <NavLink to="/journal" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-secondary scale-110" : "text-primary opacity-40")}>
+          <NavLink to="/journal" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-[#fac900] scale-110" : "text-white opacity-60")}>
             <BookOpen size={24} />
             <span className="text-[10px] font-bold uppercase">{t('nav.journal')}</span>
           </NavLink>
           
           {canAccessDiscipline && (
-            <NavLink to="/discipline" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-secondary scale-110" : "text-primary opacity-40")}>
+            <NavLink to="/discipline" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-[#fac900] scale-110" : "text-white opacity-60")}>
               <ShieldAlert size={24} />
               <span className="text-[10px] font-bold uppercase">{t('nav.discipline')}</span>
             </NavLink>
           )}
 
-          <NavLink to="/schedule" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-secondary scale-110" : "text-primary opacity-40")}>
+          <NavLink to="/horaire" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-[#fac900] scale-110" : "text-white opacity-60")}>
             <Calendar size={24} />
             <span className="text-[10px] font-bold uppercase">{t('nav.schedule')}</span>
           </NavLink>
           
-          <NavLink to="/account" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-secondary scale-110" : "text-primary opacity-40")}>
+          <NavLink to="/account" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-[#fac900] scale-110" : "text-white opacity-60")}>
             <User size={24} />
             <span className="text-[10px] font-bold uppercase">{t('nav.account')}</span>
           </NavLink>

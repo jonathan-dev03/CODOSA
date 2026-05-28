@@ -14,7 +14,7 @@ export default function Journal() {
   const [tab, setTab] = useState<'all' | 'pending'>('all');
   const [filter, setFilter] = useState('all');
 
-  const isAdmin = ['super_admin', 'directeur', 'censeur_fondamental', 'censeur_secondaire'].includes(profile?.role);
+  const isAdmin = ['super_admin', 'directeur', 'censeur'].includes(profile?.role);
 
   useEffect(() => {
     fetchArticles();

@@ -91,20 +91,20 @@ export default function Login() {
     }
   };
 
-  const handleGuestLogin = (selectedRole: string) => {
-    setGuestMode(selectedRole);
+  const handleGuestLogin = (val: string) => {
+    const [role, campus] = val.split(':');
+    setGuestMode(role, campus || 'fondamantal');
     navigate('/home');
   };
 
   const guestRoles = [
-    { value: 'directeur', label: isFr ? 'Directeur' : 'Direktè' },
-    { value: 'censeur_secondaire', label: isFr ? 'Censeur — Secondaire' : 'Sansè — Segondè' },
-    { value: 'censeur_fondamental', label: isFr ? 'Censeur — Fondamental' : 'Sansè — Fondamantal' },
-    { value: 'resp_ped_secondaire', label: isFr ? 'Resp. Pédagogique — Secondaire' : 'Resp. Pedajojik — Segondè' },
-    { value: 'resp_ped_fondamental', label: isFr ? 'Resp. Pédagogique — Fondamental' : 'Resp. Pedajojik — Fondamantal' },
-    { value: 'resp_discipline', label: isFr ? 'Responsable Discipline' : 'Responsab Disiplin' },
-    { value: 'professeur', label: isFr ? 'Professeur' : 'Pwofesè' },
-    { value: 'eleve', label: isFr ? 'Élève / Étudiant' : 'Elèv' },
+    { value: 'directeur:secondaire', label: isFr ? 'Directeur' : 'Direktè' },
+    { value: 'censeur:secondaire', label: isFr ? 'Censeur — Secondaire' : 'Sansè — Segondè' },
+    { value: 'censeur:fondamantal', label: isFr ? 'Censeur — Fondamental' : 'Sansè — Fondamantal' },
+    { value: 'resp_pedagogique:secondaire', label: isFr ? 'Resp. Pédagogique — Secondaire' : 'Resp. Pedajojik — Segondè' },
+    { value: 'resp_pedagogique:fondamantal', label: isFr ? 'Resp. Pédagogique — Fondamental' : 'Resp. Pedajojik — Fondamantal' },
+    { value: 'professeur:secondaire', label: isFr ? 'Professeur' : 'Pwofesè' },
+    { value: 'eleve:fondamantal', label: isFr ? 'Élève / Étudiant' : 'Elèv' },
   ];
 
   return (

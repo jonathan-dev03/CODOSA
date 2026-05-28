@@ -25,7 +25,7 @@ export default function Professors() {
     );
   }
 
-  const isAdminOrStaff = ['super_admin', 'directeur', 'censeur_fondamental', 'censeur_secondaire', 'resp_ped_fondamental', 'resp_ped_secondaire'].includes(profile?.role || '');
+  const isAdminOrStaff = ['super_admin', 'directeur', 'censeur', 'resp_pedagogique'].includes(profile?.role || '');
 
   const [activeTab, setActiveTab] = useState<'approved' | 'pending'>('approved');
   const [professors, setProfessors] = useState<any[]>([]);
@@ -258,15 +258,41 @@ export default function Professors() {
                       <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100 space-y-1.5 max-w-xl">
                         <p className="text-[10px] font-black uppercase text-secondary flex items-center gap-1">
                           <Clock size={12} />
-                          <span>{isFr ? "Disponibilités déclarées par jour :" : "Disponibilite pwofesè a deklare (Pa Jou) :"}</span>
+                          <span>{isFr ? "Disponibilités déclarées :" : "Disponibilite deklare :"}</span>
                         </p>
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-2 pt-1">
-                          {Object.entries(availData).map(([day, val]: [string, any]) => {
-                            if (!val.available) return null;
+                          {['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi'].map((day) => {
+                            let dayHours: number[] = [];
+                            if (Array.isArray(availData)) {
+                              dayHours = availData
+                                .filter((item: any) => item && item.day === day)
+                                .map((item: any) => item.hour)
+                                .sort((a, b) => a - b);
+                            } else if (availData && typeof availData === 'object') {
+                              const capitalizedDay = day.charAt(0).toUpperCase() + day.slice(1);
+                              const oldVal = availData[capitalizedDay];
+                              if (oldVal && oldVal.available) {
+                                return (
+                                  <div key={day} className="bg-white px-2 py-1.5 rounded-lg border border-gray-150 flex flex-col items-center">
+                                    <span className="text-[9px] font-extrabold text-primary/75 capitalize">{day}</span>
+                                    <span className="text-[10px] font-bold text-secondary font-mono mt-0.5">{oldVal.startTime} - {oldVal.endTime}</span>
+                                  </div>
+                                );
+                              }
+                            }
+
+                            if (dayHours.length === 0) return null;
+
                             return (
                               <div key={day} className="bg-white px-2 py-1.5 rounded-lg border border-gray-150 flex flex-col items-center">
                                 <span className="text-[9px] font-extrabold text-primary/75 capitalize">{day}</span>
-                                <span className="text-[10px] font-bold text-secondary font-mono mt-0.5">{val.startTime} - {val.endTime}</span>
+                                <div className="flex flex-wrap gap-1 justify-center mt-1">
+                                  {dayHours.map(h => (
+                                    <span key={h} className="text-[9px] font-bold bg-[#010657]/10 text-[#010657] px-1 rounded">
+                                      {h}h
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
                             );
                           })}

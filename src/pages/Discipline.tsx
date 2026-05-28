@@ -62,7 +62,7 @@ export default function Discipline() {
   const [archiveLogs, setArchiveLogs] = useState<any[]>([]);
   const [archiveLoading, setArchiveLoading] = useState(false);
 
-  const canStartNewYear = ['directeur', 'censeur_fondamental', 'censeur_secondaire'].includes(profile?.role);
+  const canStartNewYear = ['directeur', 'censeur'].includes(profile?.role);
 
   useEffect(() => {
     fetchData();
@@ -75,7 +75,7 @@ export default function Discipline() {
       const { data: staffData } = await supabase
         .from('users')
         .select('full_name, role')
-        .in('role', ['directeur', 'censeur_fondamental', 'censeur_secondaire']);
+        .in('role', ['directeur', 'censeur']);
       
       let computedActiveYear = localStorage.getItem('codosa_active_academic_year') || '2025-2026';
       

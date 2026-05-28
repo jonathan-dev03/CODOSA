@@ -13,6 +13,8 @@ import Professors from './pages/Professors';
 import Students from './pages/Students';
 import Homework from './pages/Homework';
 import Account from './pages/Account';
+import Courses from './pages/Courses';
+import Salles from './pages/Salles';
 import Layout from './components/Layout';
 import './i18n/config';
 
@@ -54,7 +56,10 @@ export default function App() {
             <Route path="home" element={<Home />} />
             <Route path="journal" element={<Journal />} />
             <Route path="discipline" element={<Discipline />} />
-            <Route path="schedule" element={<Schedule />} />
+            <Route path="horaire" element={<Schedule />} />
+            <Route path="schedule" element={<Navigate to="/horaire" />} />
+            <Route path="courses" element={<Courses />} />
+            <Route path="salles" element={<Salles />} />
             <Route path="professors" element={<Professors />} />
             <Route path="students" element={<Students />} />
             <Route path="homework" element={<Homework />} />
