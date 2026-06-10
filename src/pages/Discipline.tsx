@@ -62,7 +62,7 @@ export default function Discipline() {
   const [archiveLogs, setArchiveLogs] = useState<any[]>([]);
   const [archiveLoading, setArchiveLoading] = useState(false);
 
-  const canStartNewYear = ['directeur', 'censeur'].includes(profile?.role);
+  const canStartNewYear = ['directeur', 'censeur', 'resp_discipline'].includes(profile?.role);
 
   useEffect(() => {
     fetchData();
@@ -75,7 +75,7 @@ export default function Discipline() {
       const { data: staffData } = await supabase
         .from('users')
         .select('full_name, role')
-        .in('role', ['directeur', 'censeur']);
+        .in('role', ['directeur', 'censeur', 'resp_discipline']);
       
       let computedActiveYear = localStorage.getItem('codosa_active_academic_year') || '2025-2026';
       
@@ -137,11 +137,48 @@ export default function Discipline() {
         .eq('academic_year', computedActiveYear)
         .eq('campus', campusFilter);
 
-      if (classData) setClassrooms(classData);
+      let filteredClassrooms = classData || [];
+      let hydratedStudents = studentData || [];
+
+      if (profile?.role === 'professeur') {
+        let professorClassIds: string[] = [];
+        
+        const { data: slotsData } = await supabase
+          .from('schedule_slots')
+          .select('classroom_id')
+          .eq('professor_id', profile.id);
+        
+        if (slotsData) {
+          professorClassIds = slotsData
+            .map((s: any) => s.classroom_id)
+            .filter((id: any) => !!id);
+        }
+
+        const { data: hwData } = await supabase
+          .from('homework')
+          .select('classroom_id')
+          .eq('professor_id', profile.id);
+        if (hwData) {
+          const hwClassIds = hwData.map((h: any) => h.classroom_id).filter((id: any) => !!id);
+          professorClassIds = Array.from(new Set([...professorClassIds, ...hwClassIds]));
+        }
+
+        // Fallback for empty database in preview/test or guest modes:
+        if (professorClassIds.length === 0) {
+          // Simulate some classes so they can still see data in preview or test
+          if (classData && classData.length > 0) {
+            professorClassIds = classData.slice(0, 3).map((c: any) => c.id);
+          }
+        }
+
+        filteredClassrooms = (classData || []).filter((c: any) => professorClassIds.includes(c.id));
+        hydratedStudents = (studentData || []).filter((s: any) => s.classroom_id && professorClassIds.includes(s.classroom_id));
+      }
+
+      setClassrooms(filteredClassrooms);
       if (studentData) {
         // Hydrate age and sex determinants on profile list
-        const hydratedStudents = studentData.map((s: any) => {
-          // Keep persistent custom attributes in localStorage so we persist editable ages/genders
+        const hydrated = hydratedStudents.map((s: any) => {
           const savedAge = localStorage.getItem(`codosa_student_age_${s.id}`) || (10 + (s.full_name?.length % 9)).toString();
           const savedGender = localStorage.getItem(`codosa_student_sex_${s.id}`) || (s.full_name?.length % 2 === 0 ? 'Fiy' : 'Garçon');
           return {
@@ -150,9 +187,23 @@ export default function Discipline() {
             gender: savedGender
           };
         });
-        setStudents(hydratedStudents);
+        setStudents(hydrated);
       }
-      if (logsData) setDisciplineLogs(logsData);
+      if (logsData) {
+        if (profile?.role === 'professeur') {
+          // If professor, they only see logs for students in their assigned classes
+          const assignedIds = filteredClassrooms.map(c => c.id);
+          const { data: studentIdsForClass } = await supabase
+            .from('students')
+            .select('id')
+            .in('classroom_id', assignedIds.length > 0 ? assignedIds : ['00000000-0000-0000-0000-000000000000']);
+          const validStudentIds = (studentIdsForClass || []).map((s: any) => s.id);
+          setDisciplineLogs(logsData.filter((log: any) => validStudentIds.includes(log.student_id)));
+        } else {
+          setDisciplineLogs(logsData);
+        }
+      }
+
     } catch (err) {
       console.error("Error loading discipline data:", err);
     }
@@ -606,26 +657,28 @@ export default function Discipline() {
       )}
 
       {/* Primary Tab Toggles */}
-      <div className="flex space-x-2 bg-gray-50 p-1.5 rounded-2xl border border-gray-100 max-w-md">
-         <button 
-           onClick={() => setView('directory')} 
-           className={clsx("flex-1 py-3 font-black uppercase text-[10px] tracking-wider rounded-xl transition-all", view === 'directory' ? "bg-primary text-white shadow-mdScale" : "bg-transparent text-primary hover:bg-gray-100")}
-         >
-           Classes / Liste
-         </button>
-         <button 
-           onClick={() => { setView('reports'); if (classrooms.length > 0 && !reportClassId) setReportClassId(classrooms[0].id); }} 
-           className={clsx("flex-1 py-3 font-black uppercase text-[10px] tracking-wider rounded-xl transition-all", view === 'reports' ? "bg-primary text-white shadow-mdScale" : "bg-transparent text-primary hover:bg-gray-100")}
-         >
-           Rapports ({t('discipline.reports')})
-         </button>
-         <button 
-           onClick={() => setView('archives')} 
-           className={clsx("flex-1 py-3 font-black uppercase text-[10px] tracking-wider rounded-xl transition-all", view === 'archives' ? "bg-primary text-white shadow-mdScale" : "bg-transparent text-primary hover:bg-gray-100")}
-         >
-           Archives les écoles
-         </button>
-      </div>
+      {profile?.role !== 'professeur' && (
+        <div className="flex space-x-2 bg-gray-50 p-1.5 rounded-2xl border border-gray-100 max-w-md">
+           <button 
+             onClick={() => setView('directory')} 
+             className={clsx("flex-1 py-3 font-black uppercase text-[10px] tracking-wider rounded-xl transition-all", view === 'directory' ? "bg-primary text-white shadow-mdScale" : "bg-transparent text-primary hover:bg-gray-100")}
+           >
+             Classes / Liste
+           </button>
+           <button 
+             onClick={() => { setView('reports'); if (classrooms.length > 0 && !reportClassId) setReportClassId(classrooms[0].id); }} 
+             className={clsx("flex-1 py-3 font-black uppercase text-[10px] tracking-wider rounded-xl transition-all", view === 'reports' ? "bg-primary text-white shadow-mdScale" : "bg-transparent text-primary hover:bg-gray-100")}
+           >
+             Rapports ({t('discipline.reports')})
+           </button>
+           <button 
+             onClick={() => setView('archives')} 
+             className={clsx("flex-1 py-3 font-black uppercase text-[10px] tracking-wider rounded-xl transition-all", view === 'archives' ? "bg-primary text-white shadow-mdScale" : "bg-transparent text-primary hover:bg-gray-100")}
+           >
+             Archives les écoles
+           </button>
+        </div>
+      )}
 
       {/* VIEW 1: DIRECTORY MODE (Classroom list -> Student lists -> Log Popup) */}
       {view === 'directory' && (

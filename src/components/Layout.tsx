@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Home, BookOpen, ShieldAlert, Calendar, User, Bell, GraduationCap, Users, Layers } from 'lucide-react';
+import { Home, BookOpen, ShieldAlert, Calendar, User, Bell, GraduationCap, Users, Layers, FileText, MessageSquare } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -10,15 +11,174 @@ export default function Layout() {
   const { t, i18n } = useTranslation();
   const { profile, activeCampus, setActiveCampus } = useAuth();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
+  const [resettingPwd, setResettingPwd] = useState(false);
+
+  const isChatAllowed = ['professeur', 'censeur', 'resp_pedagogique', 'resp_discipline', 'secretaire', 'directeur', 'super_admin'].includes(profile?.role || '');
+
+  useEffect(() => {
+    if (!profile || !isChatAllowed) return;
+
+    let activeSub: any = null;
+
+    const fetchUnreads = async () => {
+      try {
+        const { data: cols } = await supabase
+          .from('chat_members')
+          .select('channel_id')
+          .eq('user_id', profile.id);
+
+        const channelIds = cols?.map(cm => cm.channel_id) || [];
+        if (channelIds.length === 0) {
+          setUnreadChatCount(0);
+          return;
+        }
+
+        const { data: messages } = await supabase
+          .from('chat_messages')
+          .select('id, sender_id, read_by')
+          .in('channel_id', channelIds);
+
+        if (messages) {
+          const count = messages.filter(m => {
+            const arr = m.read_by || [];
+            return m.sender_id !== profile.id && !arr.includes(profile.id);
+          }).length;
+          setUnreadChatCount(count);
+        }
+      } catch (err) {
+        console.warn("Unreads sync warning:", err);
+      }
+    };
+
+    fetchUnreads();
+
+    activeSub = supabase
+      .channel('layout_chat_bell_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, () => {
+        fetchUnreads();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_members' }, () => {
+        fetchUnreads();
+      })
+      .subscribe();
+
+    return () => {
+      if (activeSub) supabase.removeChannel(activeSub);
+    };
+  }, [profile]);
 
   const isStaff = profile?.role !== 'eleve' && profile?.role !== 'professeur';
-  const showDiscipline = profile?.role !== 'eleve'; // Teachers can see it too in some views or just filtered? User said: hidden for eleve and professeur.
-  const canAccessDiscipline = !['eleve', 'professeur'].includes(profile?.role);
+  const showDiscipline = profile?.role !== 'eleve';
+  const canAccessDiscipline = profile?.role !== 'eleve';
   const canAccessDirectory = profile?.role !== 'eleve';
+  const showCourses = ['professeur', 'resp_pedagogique', 'directeur', 'super_admin', 'censeur', 'resp_discipline'].includes(profile?.role);
   const isFr = i18n.language === 'fr';
 
   return (
     <div className="min-h-screen bg-app-bg flex flex-col lg:flex-row">
+      {profile?.needs_password_reset && (
+        <div className="fixed inset-0 bg-primary/95 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] max-w-md w-full p-8 shadow-2xl text-left relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-2 bg-secondary" />
+            
+            <h2 className="text-xl font-black text-primary uppercase mb-2">Changement de mot de passe requis</h2>
+            <p className="text-xs text-gray-500 mb-6 font-semibold">
+              Kòd sekirite ou a te réinitialiser pa yon administratè. Ou dwe chwazi yon nouvo kòd sekirite pou pwoteje kont ou.
+            </p>
+            
+            {resetError && (
+              <div className="bg-red-50 text-red-700 text-xs font-bold p-3 rounded-xl mb-4 border-l-4 border-red-500">
+                {resetError}
+              </div>
+            )}
+
+            {resetSuccess && (
+              <div className="bg-green-50 text-green-700 text-xs font-bold p-3 rounded-xl mb-4 border-l-4 border-green-500">
+                {resetSuccess}
+              </div>
+            )}
+
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setResetError('');
+              setResetSuccess('');
+              
+              if (newPassword.length < 6) {
+                setResetError(isFr ? "Le mot de passe doit comporter au moins 6 caractères." : "Modpas la dwe genyen omwen 6 karaktè.");
+                return;
+              }
+              if (newPassword !== confirmPassword) {
+                setResetError(isFr ? "Les mots de passe ne correspondent pas." : "Modpas yo pa koresponn.");
+                return;
+              }
+              
+              setResettingPwd(true);
+              try {
+                // Update auth password
+                const { error: authErr } = await supabase.auth.updateUser({
+                  password: newPassword
+                });
+                if (authErr) throw authErr;
+                
+                // Update users table in database
+                const { error: dbErr } = await supabase
+                  .from('users')
+                  .update({ needs_password_reset: false })
+                  .eq('id', profile.id);
+                  
+                if (dbErr) throw dbErr;
+                
+                setResetSuccess(isFr ? "Votre mot de passe a été modifié avec succès !" : "Modpas ou a chanje avèk siksè !");
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1500);
+              } catch (err: any) {
+                setResetError(err.message || "Erreur lors du changement de mot de passe.");
+              } finally {
+                setResettingPwd(false);
+              }
+            }} className="space-y-4">
+              <div className="flex flex-col space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase">Nouveau mot de passe :</label>
+                <input 
+                  type="password"
+                  required
+                  placeholder="Omwen 6 karaktè..."
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  className="p-3.5 bg-gray-50 focus:bg-white border border-transparent focus:border-secondary outline-none rounded-xl text-xs font-bold text-primary transition-all"
+                />
+              </div>
+
+              <div className="flex flex-col space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase">Confirmer le mot de passe :</label>
+                <input 
+                  type="password"
+                  required
+                  placeholder="Repete nouvo modpas la..."
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  className="p-3.5 bg-gray-50 focus:bg-white border border-transparent focus:border-secondary outline-none rounded-xl text-xs font-bold text-primary transition-all"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={resettingPwd}
+                className="w-full bg-[#fac900] text-[#010657] hover:bg-[#ebd056] py-3.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg flex items-center justify-center transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {resettingPwd ? "Modifikasyon ap fèt..." : "Mettre à jour mot de passe"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
       {/* Sidebar for Desktop / Tablet (Large screens) */}
       <nav className="hidden lg:flex flex-col w-72 bg-primary text-white h-screen sticky top-0 z-50 shadow-2xl">
         <div className="p-8 border-b border-white/5">
@@ -53,6 +213,11 @@ export default function Layout() {
             <span className="uppercase text-xs tracking-widest">{t('nav.journal')}</span>
           </NavLink>
           
+          <NavLink to="/devoir" className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-2xl transition-all font-bold", isActive ? "bg-accent text-primary shadow-xl scale-105" : "hover:bg-white/5 opacity-60 hover:opacity-100")}>
+            <FileText size={20} />
+            <span className="uppercase text-xs tracking-widest">{isFr ? "Devoirs" : "Devwa"}</span>
+          </NavLink>
+
           {canAccessDiscipline && (
             <NavLink to="/discipline" className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-2xl transition-all font-bold", isActive ? "bg-accent text-primary shadow-xl scale-105" : "hover:bg-white/5 opacity-60 hover:opacity-100")}>
               <ShieldAlert size={20} />
@@ -65,17 +230,30 @@ export default function Layout() {
             <span className="uppercase text-xs tracking-widest">{t('nav.schedule')}</span>
           </NavLink>
 
+          <NavLink to="/events" className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-2xl transition-all font-bold", isActive ? "bg-accent text-primary shadow-xl scale-105" : "hover:bg-white/5 opacity-60 hover:opacity-100")}>
+            <Calendar size={20} />
+            <span className="uppercase text-xs tracking-widest">{isFr ? "Événements" : "Evènman"}</span>
+          </NavLink>
+
+          {isChatAllowed && (
+            <NavLink to="/chat" className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-2xl transition-all font-bold", isActive ? "bg-accent text-primary shadow-xl scale-105" : "hover:bg-white/5 opacity-60 hover:opacity-100")}>
+              <MessageSquare size={20} />
+              <span className="uppercase text-xs tracking-widest">{isFr ? "Messagerie" : "Mesaj"}</span>
+            </NavLink>
+          )}
+
+          {showCourses && (
+            <NavLink to="/courses" className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-2xl transition-all font-bold", isActive ? "bg-accent text-primary shadow-xl scale-105" : "hover:bg-white/5 opacity-60 hover:opacity-100")}>
+              <BookOpen size={20} />
+              <span className="uppercase text-xs tracking-widest">{isFr ? "Cours & Classes" : "Jesyon Klas"}</span>
+            </NavLink>
+          )}
+
           {isStaff && (
-            <>
-              <NavLink to="/courses" className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-2xl transition-all font-bold", isActive ? "bg-accent text-primary shadow-xl scale-105" : "hover:bg-white/5 opacity-60 hover:opacity-100")}>
-                <BookOpen size={20} />
-                <span className="uppercase text-xs tracking-widest">{isFr ? "Cours & Classes" : "Jesyon Klas"}</span>
-              </NavLink>
-              <NavLink to="/salles" className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-2xl transition-all font-bold", isActive ? "bg-accent text-primary shadow-xl scale-105" : "hover:bg-white/5 opacity-60 hover:opacity-100")}>
-                <Layers size={20} />
-                <span className="uppercase text-xs tracking-widest">{isFr ? "Gestion des Salles" : "Jesyon Salles"}</span>
-              </NavLink>
-            </>
+            <NavLink to="/salles" className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-2xl transition-all font-bold", isActive ? "bg-accent text-primary shadow-xl scale-105" : "hover:bg-white/5 opacity-60 hover:opacity-100")}>
+              <Layers size={20} />
+              <span className="uppercase text-xs tracking-widest">{isFr ? "Gestion des Salles" : "Jesyon Salles"}</span>
+            </NavLink>
           )}
 
           {canAccessDirectory && (
@@ -132,41 +310,52 @@ export default function Layout() {
           </div>
 
           {/* Directeur campus switcher */}
-          {profile?.role === 'directeur' && (
-            <div className="flex items-center bg-[#fac900]/10 lg:bg-primary/5 p-1 rounded-full border border-gray-200 shadow-inner z-50">
+          {profile?.role === 'directeur' ? (
+            <div className="flex h-6 w-full max-w-[100px] border border-[#fac900] rounded-[20px] overflow-hidden z-50 transition-all duration-200 shrink-0">
               <button 
                 onClick={() => setActiveCampus('fondamentale')}
                 className={clsx(
-                  "px-3 py-1 rounded-full text-[10px] font-black transition-all cursor-pointer",
+                  "flex-1 text-center cursor-pointer select-none leading-none transition-all duration-200 ease-in-out text-[9px] md:text-[11px] font-bold h-full border-r border-[#fac900]",
                   activeCampus === 'fondamentale' 
-                    ? "bg-[#fac900] text-[#010657] shadow-md scale-102" 
-                    : "text-gray-400 lg:text-gray-500 hover:text-white lg:hover:text-primary"
+                    ? "bg-[#fac900] text-[#010657]" 
+                    : "bg-transparent text-white lg:text-[#010657]/60"
                 )}
               >
-                FONDAMENTAL
+                FOND.
               </button>
               <button 
                 onClick={() => setActiveCampus('secondaire')}
                 className={clsx(
-                  "px-3 py-1 rounded-full text-[10px] font-black transition-all cursor-pointer",
+                  "flex-1 text-center cursor-pointer select-none leading-none transition-all duration-200 ease-in-out text-[9px] md:text-[11px] font-bold h-full",
                   activeCampus === 'secondaire' 
-                    ? "bg-[#fac900] text-[#010657] shadow-md scale-102" 
-                    : "text-gray-400 lg:text-gray-500 hover:text-white lg:hover:text-primary"
+                    ? "bg-[#fac900] text-[#010657]" 
+                    : "bg-transparent text-white lg:text-[#010657]/60"
                 )}
               >
-                SECONDAIRE
+                SEC.
               </button>
             </div>
+          ) : (
+            <div className="hidden lg:block w-[100px] shrink-0"></div>
           )}
 
           <div className="flex items-center space-x-4">
+             {isChatAllowed && (
+               <NavLink to="/chat" className="relative cursor-pointer hover:opacity-85 transition-opacity mr-2">
+                  <MessageSquare className="w-6 h-6 text-secondary lg:text-primary" />
+                  {unreadChatCount > 0 && (
+                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 flex items-center justify-center rounded-full border-2 border-primary lg:border-white animate-pulse">
+                       {unreadChatCount}
+                     </span>
+                  )}
+               </NavLink>
+             )}
+
              <div className="relative cursor-pointer">
                 <Bell className="w-6 h-6 text-secondary lg:text-primary" />
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 flex items-center justify-center rounded-full border-2 border-primary lg:border-white">0</span>
              </div>
-             <div className="lg:hidden w-8 h-8 rounded-full bg-secondary border-2 border-white/20 shadow-sm overflow-hidden flex items-center justify-center font-black text-xs text-white uppercase">
-                {profile?.full_name?.charAt(0)}
-             </div>
+
           </div>
         </header>
 
@@ -233,6 +422,12 @@ export default function Layout() {
                   <BookOpen size={18} />
                   <span className="uppercase text-xs tracking-widest">{t('nav.journal')}</span>
                 </NavLink>
+
+                <NavLink to="/devoir" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
+                  <FileText size={18} />
+                  <span className="uppercase text-xs tracking-widest">{isFr ? "Devoirs" : "Devwa"}</span>
+                </NavLink>
+
                 {canAccessDiscipline && (
                   <NavLink to="/discipline" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
                     <ShieldAlert size={18} />
@@ -244,17 +439,29 @@ export default function Layout() {
                   <span className="uppercase text-xs tracking-widest">{t('nav.schedule')}</span>
                 </NavLink>
 
+                <NavLink to="/events" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
+                  <Calendar size={18} />
+                  <span className="uppercase text-xs tracking-widest">{isFr ? "Événements" : "Evènman"}</span>
+                </NavLink>
+
+                {isChatAllowed && (
+                  <NavLink to="/chat" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
+                    <MessageSquare size={18} />
+                    <span className="uppercase text-xs tracking-widest">{isFr ? "Messagerie" : "Mesaj"}</span>
+                  </NavLink>
+                )}
+
+                {showCourses && (
+                  <NavLink to="/courses" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
+                    <BookOpen size={18} />
+                    <span className="uppercase text-xs tracking-widest">{isFr ? "Cours & Classes" : "Jesyon Klas"}</span>
+                  </NavLink>
+                )}
                 {isStaff && (
-                  <>
-                    <NavLink to="/courses" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
-                      <BookOpen size={18} />
-                      <span className="uppercase text-xs tracking-widest">{isFr ? "Cours & Classes" : "Jesyon Klas"}</span>
-                    </NavLink>
-                    <NavLink to="/salles" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
-                      <Layers size={18} />
-                      <span className="uppercase text-xs tracking-widest">{isFr ? "Gestion des Salles" : "Jesyon Salles"}</span>
-                    </NavLink>
-                  </>
+                  <NavLink to="/salles" onClick={() => setIsDrawerOpen(false)} className={({ isActive }) => clsx("flex items-center space-x-4 p-4 rounded-xl transition-all font-bold text-white", isActive ? "bg-accent text-primary shadow-lg" : "opacity-60 hover:opacity-100")}>
+                    <Layers size={18} />
+                    <span className="uppercase text-xs tracking-widest">{isFr ? "Gestion des Salles" : "Jesyon Salles"}</span>
+                  </NavLink>
                 )}
                 {canAccessDirectory && (
                   <>
@@ -294,11 +501,18 @@ export default function Layout() {
             <span className="text-[10px] font-bold uppercase">{t('nav.journal')}</span>
           </NavLink>
           
-          {canAccessDiscipline && (
-            <NavLink to="/discipline" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-[#fac900] scale-110" : "text-white opacity-60")}>
-              <ShieldAlert size={24} />
-              <span className="text-[10px] font-bold uppercase">{t('nav.discipline')}</span>
+          {profile?.role === 'eleve' ? (
+            <NavLink to="/devoir" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-[#fac900] scale-110" : "text-white opacity-60")}>
+              <FileText size={24} />
+              <span className="text-[10px] font-bold uppercase">{isFr ? "Devoirs" : "Devwa"}</span>
             </NavLink>
+          ) : (
+            canAccessDiscipline && (
+              <NavLink to="/discipline" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-[#fac900] scale-110" : "text-white opacity-60")}>
+                <ShieldAlert size={24} />
+                <span className="text-[10px] font-bold uppercase">{t('nav.discipline')}</span>
+              </NavLink>
+            )
           )}
 
           <NavLink to="/horaire" className={({ isActive }) => clsx("flex flex-col items-center space-y-1 transition-all", isActive ? "text-[#fac900] scale-110" : "text-white opacity-60")}>

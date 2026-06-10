@@ -53,7 +53,7 @@ export default function Account() {
   };
 
   // Visibility constraints
-  const canStartNewYear = ['directeur', 'censeur', 'super_admin'].includes(profile?.role || '');
+  const canStartNewYear = ['directeur', 'censeur', 'resp_discipline', 'super_admin'].includes(profile?.role || '');
   const isAdmin = ['super_admin', 'directeur'].includes(profile?.role || '');
 
   // Modal States
@@ -414,7 +414,10 @@ export default function Account() {
         )}
 
         {isAdmin && (
-          <button className="w-full flex items-center justify-between p-4 bg-primary text-white rounded-2xl transition-all shadow-lg active:scale-[0.98] text-left">
+          <button 
+            onClick={() => navigate('/admin')}
+            className="w-full flex items-center justify-between p-4 bg-primary text-white rounded-2xl transition-all shadow-lg active:scale-[0.98] text-left cursor-pointer"
+          >
             <div className="flex items-center space-x-4">
               <div className="bg-white/20 p-3 rounded-xl"><ShieldCheck size={20} /></div>
               <span className="font-bold uppercase tracking-widest text-xs">{t('account.admin_panel')}</span>

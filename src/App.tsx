@@ -15,6 +15,10 @@ import Homework from './pages/Homework';
 import Account from './pages/Account';
 import Courses from './pages/Courses';
 import Salles from './pages/Salles';
+import Admin from './pages/Admin';
+import Presence from './pages/Presence';
+import Events from './pages/Events';
+import Chat from './pages/Chat';
 import Layout from './components/Layout';
 import './i18n/config';
 
@@ -62,8 +66,13 @@ export default function App() {
             <Route path="salles" element={<Salles />} />
             <Route path="professors" element={<Professors />} />
             <Route path="students" element={<Students />} />
-            <Route path="homework" element={<Homework />} />
+            <Route path="devoir" element={<Homework />} />
+            <Route path="homework" element={<Navigate to="/devoir" />} />
             <Route path="account" element={<Account />} />
+            <Route path="admin" element={<Admin />} />
+            <Route path="presence" element={<Presence />} />
+            <Route path="events" element={<Events />} />
+            <Route path="chat" element={<Chat />} />
           </Route>
           
           <Route path="*" element={<Navigate to="/splash" />} />

@@ -42,9 +42,9 @@ export default function Schedule() {
   const [loading, setLoading] = useState(true);
   const [teachers, setTeachers] = useState<any[]>([]);
   
-  const isFundamentalStaff = ['censeur', 'resp_pedagogique'].includes(profile?.role || '') && profile?.campus === 'fondamantal';
-  const isSecondaryStaff = ['censeur', 'resp_pedagogique'].includes(profile?.role || '') && profile?.campus === 'secondaire';
-  const isAdminOrStaff = ['super_admin', 'directeur', 'censeur', 'resp_pedagogique'].includes(profile?.role || '');
+  const isFundamentalStaff = ['censeur', 'resp_pedagogique', 'resp_discipline'].includes(profile?.role || '') && profile?.campus === 'fondamantal';
+  const isSecondaryStaff = ['censeur', 'resp_pedagogique', 'resp_discipline'].includes(profile?.role || '') && profile?.campus === 'secondaire';
+  const isAdminOrStaff = ['super_admin', 'directeur', 'censeur', 'resp_pedagogique', 'resp_discipline'].includes(profile?.role || '');
 
   // Campus view logic matching role restrictions
   const initialCampus = isFundamentalStaff ? 'fondamantal' : (isSecondaryStaff ? 'secondaire' : (profile?.campus === 'both' ? 'fondamantal' : profile?.campus || 'fondamantal'));

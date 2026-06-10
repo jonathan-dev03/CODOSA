@@ -41,6 +41,14 @@ export default function Login() {
         setError(authError.message);
         setLoading(false);
       } else {
+        // Log last login timestamp
+        if (data?.user) {
+          try {
+            await supabase.from('users').update({ last_login_at: new Date().toISOString() }).eq('id', data.user.id);
+          } catch (lr) {
+            console.warn("Could not save last login timestamp", lr);
+          }
+        }
         // Successful login - role detection is handled automatically by AuthContext profile fetch
         navigate('/home');
       }

@@ -29,6 +29,91 @@ export default function Register() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  const [existingAccounts, setExistingAccounts] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchExistingAccounts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('role, campus, status')
+          .neq('status', 'deactivated');
+        if (!error && data) {
+          setExistingAccounts(data);
+        }
+      } catch (err) {
+        console.error("Error loaded accounts:", err);
+      }
+    };
+    fetchExistingAccounts();
+  }, []);
+
+  const isSameCampus = (c1: string, c2: string) => {
+    const norm1 = (c1 || '').toLowerCase().trim();
+    const norm2 = (c2 || '').toLowerCase().trim();
+    const base1 = norm1 === 'fondamantal' ? 'fondamentale' : norm1;
+    const base2 = norm2 === 'fondamantal' ? 'fondamentale' : norm2;
+    return base1 === base2;
+  };
+
+  const getAvailableRoles = () => {
+    const currentCampus = formData.campus;
+    const roles = [
+      { value: 'eleve', label: isFr ? "Élève" : "Elèv" },
+      { value: 'professeur', label: isFr ? "Professeur" : "Pwofesè" },
+    ];
+
+    // CAPPED ROLES checks
+
+    // DIRECTEUR: max 1 per campus
+    const dirCount = existingAccounts.filter(a => a.role === 'directeur' && isSameCampus(a.campus, currentCampus)).length;
+    if (dirCount < 1) {
+      roles.push({ value: 'directeur', label: isFr ? "Directeur" : "Direktè" });
+    }
+
+    // CENSEUR: max 1 per campus
+    const cenCount = existingAccounts.filter(a => a.role === 'censeur' && isSameCampus(a.campus, currentCampus)).length;
+    if (cenCount < 1) {
+      roles.push({ value: 'censeur', label: isFr ? "Censeur" : "Sansè" });
+    }
+
+    // RESP_PEDAGOGIQUE: max 1 per campus
+    const rpCount = existingAccounts.filter(a => a.role === 'resp_pedagogique' && isSameCampus(a.campus, currentCampus)).length;
+    if (rpCount < 1) {
+      roles.push({ value: 'resp_pedagogique', label: isFr ? "Responsable Pédagogique" : "Resp. Pedagojik" });
+    }
+
+    // SECRETAIRE: max 1 total (covers both campuses)
+    const secCount = existingAccounts.filter(a => a.role === 'secretaire').length;
+    if (secCount < 1) {
+      roles.push({ value: 'secretaire', label: isFr ? "Secrétaire" : "Sekretè" });
+    }
+
+    // RESP_DISCIPLINE: campus: fondamental only initially (max 2 total)
+    if (isSameCampus(currentCampus, 'fondamentale')) {
+      const rdCount = existingAccounts.filter(a => a.role === 'resp_discipline' && isSameCampus(a.campus, 'fondamentale')).length;
+      if (rdCount < 2) {
+        roles.push({ value: 'resp_discipline', label: isFr ? "Responsable Discipline" : "Resp. Disiplin" });
+      }
+    } else {
+      const rdCount = existingAccounts.filter(a => a.role === 'resp_discipline' && isSameCampus(a.campus, 'secondaire')).length;
+      if (rdCount < 2) {
+        roles.push({ value: 'resp_discipline', label: isFr ? "Responsable Discipline" : "Resp. Disiplin" });
+      }
+    }
+
+    return roles;
+  };
+
+  useEffect(() => {
+    const avail = getAvailableRoles();
+    const isSelectedRoleAvailable = avail.some(r => r.value === formData.role);
+    if (!isSelectedRoleAvailable) {
+      setFormData(prev => ({ ...prev, role: 'eleve' }));
+    }
+  }, [formData.campus, existingAccounts]);
+
+
   const toggleLanguage = () => {
     const nextLang = i18n.language === 'fr' ? 'ha' : 'fr';
     i18n.changeLanguage(nextLang);
@@ -324,12 +409,11 @@ export default function Register() {
                   value={formData.role}
                   onChange={e => setFormData({ ...formData, role: e.target.value })}
                 >
-                  <option value="eleve">{isFr ? "Élève" : "Elèv"}</option>
-                  <option value="professeur">{isFr ? "Professeur" : "Pwofesè"}</option>
-                  <option value="censeur">{isFr ? "Censeur" : "Sansè"}</option>
-                  <option value="resp_pedagogique">{isFr ? "Responsable Pédagogique" : "Resp. Pedagojik"}</option>
-                  <option value="secretaire">{isFr ? "Secrétaire" : "Sekretè"}</option>
-                  <option value="directeur">{isFr ? "Directeur" : "Direktè"}</option>
+                  {getAvailableRoles().map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
