@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { motion, AnimatePresence } from 'motion/react';
-import { Mail, Lock, ShieldAlert, ArrowRight, UserCheck } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Mail, Lock, ShieldAlert, ArrowRight } from 'lucide-react';
 
 export default function Login() {
   const { t, i18n } = useTranslation();
-  const { setGuestMode } = useAuth();
   const navigate = useNavigate();
   const isFr = i18n.language === 'fr';
 
@@ -16,7 +14,6 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showGuestRoles, setShowGuestRoles] = useState(false);
 
   const toggleLanguage = () => {
     i18n.changeLanguage(i18n.language === 'ha' ? 'fr' : 'ha');
@@ -99,21 +96,7 @@ export default function Login() {
     }
   };
 
-  const handleGuestLogin = (val: string) => {
-    const [role, campus] = val.split(':');
-    setGuestMode(role, campus || 'fondamantal');
-    navigate('/home');
-  };
 
-  const guestRoles = [
-    { value: 'directeur:secondaire', label: isFr ? 'Directeur' : 'Direktè' },
-    { value: 'censeur:secondaire', label: isFr ? 'Censeur — Secondaire' : 'Sansè — Segondè' },
-    { value: 'censeur:fondamantal', label: isFr ? 'Censeur — Fondamental' : 'Sansè — Fondamantal' },
-    { value: 'resp_pedagogique:secondaire', label: isFr ? 'Resp. Pédagogique — Secondaire' : 'Resp. Pedajojik — Segondè' },
-    { value: 'resp_pedagogique:fondamantal', label: isFr ? 'Resp. Pédagogique — Fondamental' : 'Resp. Pedajojik — Fondamantal' },
-    { value: 'professeur:secondaire', label: isFr ? 'Professeur' : 'Pwofesè' },
-    { value: 'eleve:fondamantal', label: isFr ? 'Élève / Étudiant' : 'Elèv' },
-  ];
 
   return (
     <div className="min-h-screen bg-app-bg flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -247,16 +230,8 @@ export default function Login() {
             </button>
           </div>
 
-          {/* GUEST & REGISTER LINKS */}
+          {/* REGISTER LINK */}
           <div className="space-y-4 pt-4 border-t border-gray-100 text-center">
-            <button 
-              type="button"
-              onClick={() => setShowGuestRoles(true)}
-              className="w-full text-center text-primary/70 hover:text-primary text-xs font-black uppercase tracking-widest transition-colors"
-            >
-              {isFr ? "Continuer en tant qu'invité" : "Kontinye kòm envite"}
-            </button>
-
             <div className="text-xs text-gray-500 font-bold">
               {isFr ? "Pas encore de compte ?" : "Pa gen kont ?"}{' '}
               <Link to="/register" className="text-secondary font-black uppercase hover:underline">
@@ -267,52 +242,6 @@ export default function Login() {
 
         </div>
       </motion.div>
-
-      {/* Guest Role Simulation Modal */}
-      <AnimatePresence>
-        {showGuestRoles && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          >
-            <motion.div 
-              initial={{ scale: 0.95, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 15 }}
-              className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl border border-gray-100 relative"
-            >
-              <h3 className="text-lg font-black text-primary uppercase text-center mb-2">
-                {isFr ? "Mode Invité" : "Mòd Envite"}
-              </h3>
-              <p className="text-center text-xs text-secondary font-bold uppercase tracking-wider mb-6">
-                {isFr ? "Choisissez votre rôle de démonstration" : "Chwazi wòl ou pou tès la"}
-              </p>
-
-              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                {guestRoles.map((g) => (
-                  <button
-                    key={g.value}
-                    onClick={() => handleGuestLogin(g.value)}
-                    className="w-full p-3 text-left bg-gray-50 hover:bg-secondary hover:text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-between"
-                  >
-                    <span>{g.label}</span>
-                    <UserCheck size={14} className="opacity-70" />
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={() => setShowGuestRoles(false)}
-                className="w-full mt-6 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl text-xs font-black uppercase tracking-widest text-primary/85 transition-colors"
-              >
-                {isFr ? "Annuler" : "Anile"}
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
